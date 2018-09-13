@@ -30,14 +30,14 @@ import (
 
 // Constants to match up protocol versions and messages
 const (
-	dex64 = 64
+	eth63 = 63
 )
 
 // ProtocolName is the official short name of the protocol used during capability negotiation.
-var ProtocolName = "dex"
+var ProtocolName = "eth"
 
 // ProtocolVersions are the upported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{dex64}
+var ProtocolVersions = []uint{eth63}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
 var ProtocolLengths = []uint64{17, 8}
