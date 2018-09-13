@@ -30,6 +30,7 @@ import (
 
 // Constants to match up protocol versions and messages
 const (
+	eth62 = 62
 	eth63 = 63
 )
 
@@ -37,7 +38,7 @@ const (
 var ProtocolName = "eth"
 
 // ProtocolVersions are the upported versions of the eth protocol (first is primary).
-var ProtocolVersions = []uint{eth63}
+var ProtocolVersions = []uint{eth63, eth62}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
 var ProtocolLengths = []uint64{17, 8}
