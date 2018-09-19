@@ -23,6 +23,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -93,13 +94,19 @@ func (s *stateObject) empty() bool {
 	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
 }
 
+type assetBalance struct {
+	ID      string
+	Balance *big.Int
+}
+
 // Account is the Ethereum consensus representation of accounts.
 // These objects are stored in the main account trie.
 type Account struct {
-	Nonce    uint64
-	Balance  *big.Int
-	Root     common.Hash // merkle root of the storage trie
-	CodeHash []byte
+	Nonce         uint64
+	Balance       *big.Int
+	AssetBalances []assetBalance
+	Root          common.Hash // merkle root of the storage trie
+	CodeHash      []byte
 }
 
 // newObject creates a state object.
@@ -235,7 +242,7 @@ func (self *stateObject) CommitTrie(db Database) error {
 
 // AddBalance removes amount from c's balance.
 // It is used to add funds to the destination account of a transfer.
-func (c *stateObject) AddBalance(amount *big.Int) {
+func (c *stateObject) AddBalance(currencyID string, amount *big.Int) {
 	// EIP158: We must check emptiness for the objects such that the account
 	// clearing (0,0,0 objects) can take effect.
 	if amount.Sign() == 0 {
@@ -245,28 +252,38 @@ func (c *stateObject) AddBalance(amount *big.Int) {
 
 		return
 	}
-	c.SetBalance(new(big.Int).Add(c.Balance(), amount))
+	c.SetBalance(currencyID, new(big.Int).Add(c.Balance(currencyID), amount))
 }
 
 // SubBalance removes amount from c's balance.
 // It is used to remove funds from the origin account of a transfer.
-func (c *stateObject) SubBalance(amount *big.Int) {
+func (c *stateObject) SubBalance(currencyID string, amount *big.Int) {
 	if amount.Sign() == 0 {
 		return
 	}
-	c.SetBalance(new(big.Int).Sub(c.Balance(), amount))
+	c.SetBalance(currencyID, new(big.Int).Sub(c.Balance(currencyID), amount))
 }
 
-func (self *stateObject) SetBalance(amount *big.Int) {
+func (self *stateObject) SetBalance(currencyID string, amount *big.Int) {
 	self.db.journal.append(balanceChange{
-		account: &self.address,
-		prev:    new(big.Int).Set(self.data.Balance),
+		account:    &self.address,
+		prev:       new(big.Int).Set(self.data.Balance),
+		prevAssets: self.AssetBalances(),
 	})
-	self.setBalance(amount)
+	self.setBalance(currencyID, amount)
 }
 
-func (self *stateObject) setBalance(amount *big.Int) {
-	self.data.Balance = amount
+func (self *stateObject) setBalance(currencyID string, amount *big.Int) {
+	if currencyID == types.DefaultCurrency {
+		self.data.Balance = amount
+		return
+	}
+
+	for _, a := range self.data.AssetBalances {
+		if a.ID == currencyID {
+			a.Balance = amount
+		}
+	}
 }
 
 // Return the gas back to the origin. Used by the Virtual machine or Closures
@@ -343,8 +360,30 @@ func (self *stateObject) CodeHash() []byte {
 	return self.data.CodeHash
 }
 
-func (self *stateObject) Balance() *big.Int {
-	return self.data.Balance
+func (self *stateObject) Balance(currencyID string) *big.Int {
+	// TODO(w): replace balance slice with map (need rlp codec for map)
+	if currencyID == types.DefaultCurrency {
+		return self.data.Balance
+	}
+
+	for _, b := range self.data.AssetBalances {
+		if b.ID == currencyID {
+			return b.Balance
+		}
+	}
+	return big.NewInt(0)
+}
+
+func (self *stateObject) AssetBalances() []assetBalance {
+	bs := []assetBalance{}
+
+	for _, b := range self.data.AssetBalances {
+		bs = append(bs, assetBalance{
+			ID:      b.ID,
+			Balance: new(big.Int).Set(b.Balance),
+		})
+	}
+	return bs
 }
 
 func (self *stateObject) Nonce() uint64 {

@@ -20,6 +20,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 // journalEntry is a modification entry in the state change journal that can be
@@ -93,15 +94,17 @@ type (
 		prev *stateObject
 	}
 	suicideChange struct {
-		account     *common.Address
-		prev        bool // whether account had already suicided
-		prevbalance *big.Int
+		account           *common.Address
+		prev              bool // whether account had already suicided
+		prevbalance       *big.Int
+		prevAssetBalances []assetBalance
 	}
 
 	// Changes to individual accounts.
 	balanceChange struct {
-		account *common.Address
-		prev    *big.Int
+		account    *common.Address
+		prev       *big.Int
+		prevAssets []assetBalance
 	}
 	nonceChange struct {
 		account *common.Address
@@ -154,7 +157,10 @@ func (ch suicideChange) revert(s *StateDB) {
 	obj := s.getStateObject(*ch.account)
 	if obj != nil {
 		obj.suicided = ch.prev
-		obj.setBalance(ch.prevbalance)
+		obj.setBalance(types.DefaultCurrency, ch.prevbalance)
+		for _, b := range ch.prevAssetBalances {
+			obj.setBalance(b.ID, b.Balance)
+		}
 	}
 }
 
@@ -172,7 +178,11 @@ func (ch touchChange) dirtied() *common.Address {
 }
 
 func (ch balanceChange) revert(s *StateDB) {
-	s.getStateObject(*ch.account).setBalance(ch.prev)
+	obj := s.getStateObject(*ch.account)
+	obj.setBalance(types.DefaultCurrency, ch.prev)
+	for _, b := range ch.prevAssets {
+		obj.setBalance(b.ID, b.Balance)
+	}
 }
 
 func (ch balanceChange) dirtied() *common.Address {

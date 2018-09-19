@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -187,7 +188,7 @@ func (dw *dbWrapper) pushObject(vm *duktape.Context) {
 
 	// Push the wrapper for statedb.GetBalance
 	vm.PushGoFunction(func(ctx *duktape.Context) int {
-		pushBigInt(dw.db.GetBalance(common.BytesToAddress(popSlice(ctx))), ctx)
+		pushBigInt(dw.db.GetBalance(common.BytesToAddress(popSlice(ctx)), types.DefaultCurrency), ctx)
 		return 1
 	})
 	vm.PutPropString(obj, "getBalance")

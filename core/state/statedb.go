@@ -188,10 +188,10 @@ func (self *StateDB) Empty(addr common.Address) bool {
 }
 
 // Retrieve the balance from the given address or 0 if object not found
-func (self *StateDB) GetBalance(addr common.Address) *big.Int {
+func (self *StateDB) GetBalance(addr common.Address, currencyID string) *big.Int {
 	stateObject := self.getStateObject(addr)
 	if stateObject != nil {
-		return stateObject.Balance()
+		return stateObject.Balance(currencyID)
 	}
 	return common.Big0
 }
@@ -273,25 +273,25 @@ func (self *StateDB) HasSuicided(addr common.Address) bool {
  */
 
 // AddBalance adds amount to the account associated with addr.
-func (self *StateDB) AddBalance(addr common.Address, amount *big.Int) {
+func (self *StateDB) AddBalance(addr common.Address, currencyID string, amount *big.Int) {
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		stateObject.AddBalance(amount)
+		stateObject.AddBalance(currencyID, amount)
 	}
 }
 
 // SubBalance subtracts amount from the account associated with addr.
-func (self *StateDB) SubBalance(addr common.Address, amount *big.Int) {
+func (self *StateDB) SubBalance(addr common.Address, currencyID string, amount *big.Int) {
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		stateObject.SubBalance(amount)
+		stateObject.SubBalance(currencyID, amount)
 	}
 }
 
-func (self *StateDB) SetBalance(addr common.Address, amount *big.Int) {
+func (self *StateDB) SetBalance(addr common.Address, currencyID string, amount *big.Int) {
 	stateObject := self.GetOrNewStateObject(addr)
 	if stateObject != nil {
-		stateObject.SetBalance(amount)
+		stateObject.SetBalance(currencyID, amount)
 	}
 }
 
@@ -327,9 +327,10 @@ func (self *StateDB) Suicide(addr common.Address) bool {
 		return false
 	}
 	self.journal.append(suicideChange{
-		account:     &addr,
-		prev:        stateObject.suicided,
-		prevbalance: new(big.Int).Set(stateObject.Balance()),
+		account:           &addr,
+		prev:              stateObject.suicided,
+		prevbalance:       new(big.Int).Set(stateObject.Balance(types.DefaultCurrency)),
+		prevAssetBalances: stateObject.AssetBalances(),
 	})
 	stateObject.markSuicided()
 	stateObject.data.Balance = new(big.Int)
@@ -426,7 +427,10 @@ func (self *StateDB) createObject(addr common.Address) (newobj, prev *stateObjec
 func (self *StateDB) CreateAccount(addr common.Address) {
 	new, prev := self.createObject(addr)
 	if prev != nil {
-		new.setBalance(prev.data.Balance)
+		new.setBalance(types.DefaultCurrency, prev.data.Balance)
+		for _, b := range prev.data.AssetBalances {
+			new.setBalance(b.ID, b.Balance)
+		}
 	}
 }
 
