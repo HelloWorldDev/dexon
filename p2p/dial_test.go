@@ -525,6 +525,223 @@ func TestDialStateStaticDial(t *testing.T) {
 	})
 }
 
+func TestDialStateDirectDial(t *testing.T) {
+	wantDirect := []*discover.Node{
+		{ID: uintID(1)},
+		{ID: uintID(2)},
+		{ID: uintID(3)},
+		{ID: uintID(4)},
+		{ID: uintID(5)},
+	}
+	init := newDialState(nil, nil, fakeTable{}, 0, nil)
+	for _, node := range wantDirect {
+		init.addDirect(node)
+	}
+
+	runDialTest(t, dialtest{
+		init: init,
+		rounds: []round{
+			// Direct dials are launched for the nodes that
+			// aren't yet connected.
+			{
+				peers: []*Peer{
+					{rw: &conn{flags: dynDialedConn, id: uintID(1)}},
+					{rw: &conn{flags: dynDialedConn, id: uintID(2)}},
+				},
+				new: []task{
+					&dialTask{flags: directDialedConn, dest: &discover.Node{ID: uintID(3)}},
+					&dialTask{flags: directDialedConn, dest: &discover.Node{ID: uintID(4)}},
+					&dialTask{flags: directDialedConn, dest: &discover.Node{ID: uintID(5)}},
+				},
+			},
+			// No new tasks are launched in this round because all direct
+			// nodes are either connected or still being dialed.
+			{
+				peers: []*Peer{
+					{rw: &conn{flags: dynDialedConn, id: uintID(1)}},
+					{rw: &conn{flags: dynDialedConn, id: uintID(2)}},
+					{rw: &conn{flags: staticDialedConn, id: uintID(3)}},
+				},
+				done: []task{
+					&dialTask{flags: staticDialedConn, dest: &discover.Node{ID: uintID(3)}},
+				},
+			},
+			// No new dial tasks are launched because all direct
+			// nodes are now connected.
+			{
+				peers: []*Peer{
+					{rw: &conn{flags: dynDialedConn, id: uintID(1)}},
+					{rw: &conn{flags: dynDialedConn, id: uintID(2)}},
+					{rw: &conn{flags: directDialedConn, id: uintID(3)}},
+					{rw: &conn{flags: directDialedConn, id: uintID(4)}},
+					{rw: &conn{flags: directDialedConn, id: uintID(5)}},
+				},
+				done: []task{
+					&dialTask{flags: directDialedConn, dest: &discover.Node{ID: uintID(4)}},
+					&dialTask{flags: directDialedConn, dest: &discover.Node{ID: uintID(5)}},
+				},
+				new: []task{
+					&waitExpireTask{Duration: 14 * time.Second},
+				},
+			},
+			// Wait a round for dial history to expire, no new tasks should spawn.
+			{
+				peers: []*Peer{
+					{rw: &conn{flags: dynDialedConn, id: uintID(1)}},
+					{rw: &conn{flags: dynDialedConn, id: uintID(2)}},
+					{rw: &conn{flags: directDialedConn, id: uintID(3)}},
+					{rw: &conn{flags: directDialedConn, id: uintID(4)}},
+					{rw: &conn{flags: directDialedConn, id: uintID(5)}},
+				},
+			},
+			// If a direct node is dropped, it should be immediately redialed,
+			// irrespective whether it was originally static or dynamic.
+			{
+				peers: []*Peer{
+					{rw: &conn{flags: dynDialedConn, id: uintID(1)}},
+					{rw: &conn{flags: directDialedConn, id: uintID(3)}},
+					{rw: &conn{flags: directDialedConn, id: uintID(5)}},
+				},
+				new: []task{
+					&dialTask{flags: directDialedConn, dest: &discover.Node{ID: uintID(2)}},
+					&dialTask{flags: directDialedConn, dest: &discover.Node{ID: uintID(4)}},
+				},
+			},
+		},
+	})
+}
+
+func TestDialStateGroupDial(t *testing.T) {
+	groups := []*dialGroup{
+		&dialGroup{
+			name: "g1",
+			nodes: map[discover.NodeID]*discover.Node{
+				uintID(1): &discover.Node{ID: uintID(1)},
+				uintID(2): &discover.Node{ID: uintID(2)},
+			},
+			num: 2,
+		},
+		&dialGroup{
+			name: "g2",
+			nodes: map[discover.NodeID]*discover.Node{
+				uintID(2): &discover.Node{ID: uintID(2)},
+				uintID(3): &discover.Node{ID: uintID(3)},
+				uintID(4): &discover.Node{ID: uintID(4)},
+				uintID(5): &discover.Node{ID: uintID(5)},
+				uintID(6): &discover.Node{ID: uintID(6)},
+			},
+			num: 2,
+		},
+	}
+
+	type groupTest struct {
+		peers   []*Peer
+		dialing map[discover.NodeID]connFlag
+		ceiling map[string]uint64
+	}
+
+	tests := []groupTest{
+		{
+			peers:   nil,
+			dialing: map[discover.NodeID]connFlag{},
+			ceiling: map[string]uint64{"g1": 2, "g2": 4},
+		},
+		{
+			peers: []*Peer{
+				{rw: &conn{flags: staticDialedConn, id: uintID(2)}},
+			},
+			dialing: map[discover.NodeID]connFlag{
+				uintID(1): staticDialedConn,
+			},
+			ceiling: map[string]uint64{"g1": 2, "g2": 2},
+		},
+		{
+			peers: []*Peer{
+				{rw: &conn{flags: staticDialedConn, id: uintID(1)}},
+				{rw: &conn{flags: staticDialedConn, id: uintID(3)}},
+				{rw: &conn{flags: staticDialedConn, id: uintID(4)}},
+				{rw: &conn{flags: staticDialedConn, id: uintID(5)}},
+			},
+			dialing: map[discover.NodeID]connFlag{
+				uintID(2): staticDialedConn,
+			},
+			ceiling: map[string]uint64{"g1": 2, "g2": 4},
+		},
+		{
+			peers: nil,
+			dialing: map[discover.NodeID]connFlag{
+				uintID(1): staticDialedConn,
+				uintID(2): staticDialedConn,
+				uintID(3): staticDialedConn,
+			},
+			ceiling: map[string]uint64{"g1": 2, "g2": 4},
+		},
+	}
+
+	pm := func(ps []*Peer) map[discover.NodeID]*Peer {
+		m := make(map[discover.NodeID]*Peer)
+		for _, p := range ps {
+			m[p.rw.id] = p
+		}
+		return m
+	}
+
+	run := func(i int, tt groupTest) {
+		d := newDialState(nil, nil, fakeTable{}, 0, nil)
+		d.dialing = make(map[discover.NodeID]connFlag)
+		for k, v := range tt.dialing {
+			d.dialing[k] = v
+		}
+
+		for _, g := range groups {
+			d.addGroup(g)
+		}
+		peermap := pm(tt.peers)
+		new := d.newTasks(len(tt.dialing), peermap, time.Now())
+
+		cnt := map[string]uint64{}
+		for id := range peermap {
+			for _, g := range groups {
+				if _, ok := g.nodes[id]; ok {
+					cnt[g.name]++
+				}
+			}
+		}
+
+		for id := range tt.dialing {
+			for _, g := range groups {
+				if _, ok := g.nodes[id]; ok {
+					cnt[g.name]++
+				}
+			}
+		}
+
+		for _, task := range new {
+			id := task.(*dialTask).dest.ID
+			for _, g := range groups {
+				if _, ok := g.nodes[id]; ok {
+					cnt[g.name]++
+				}
+			}
+		}
+
+		for _, g := range groups {
+			if cnt[g.name] < g.num {
+				t.Errorf("test %d) group %s peers + dialing + new < num (%d < %d)",
+					i, g.name, cnt[g.name], g.num)
+			}
+			if cnt[g.name] > tt.ceiling[g.name] {
+				t.Errorf("test %d) group %s peers + dialing + new > ceiling (%d > %d)",
+					i, g.name, cnt[g.name], tt.ceiling[g.name])
+			}
+		}
+	}
+
+	for i, tt := range tests {
+		run(i, tt)
+	}
+}
+
 // This test checks that static peers will be redialed immediately if they were re-added to a static list.
 func TestDialStaticAfterReset(t *testing.T) {
 	wantStatic := []*enode.Node{
