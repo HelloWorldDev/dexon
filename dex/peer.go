@@ -596,6 +596,9 @@ func (ps *peerSet) AddNotaryPeer(round uint64, p *peer) error {
 		return errNotRegistered
 	}
 
+	if _, ok := ps.notaryPeers[round]; !ok {
+		ps.notaryPeers[round] = make(map[string]*peer)
+	}
 	ps.notaryPeers[round][p.id] = p
 	return nil
 }
@@ -614,10 +617,18 @@ func (ps *peerSet) NotaryPeers(round uint64) []*peer {
 	return list
 }
 
-// NextRound moves notary peer set to next round.
-func (ps *peerSet) NextRound() {
+// SetRound sets notary peer set to the given round.
+func (ps *peerSet) SetRound(r uint64) error {
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
-	delete(ps.notaryPeers, ps.round)
-	ps.round = ps.round + 1
+	if r < ps.round {
+		return errInvalidRound
+	}
+	for round := range ps.notaryPeers {
+		if round < r {
+			delete(ps.notaryPeers, round)
+		}
+	}
+	ps.round = r
+	return nil
 }
