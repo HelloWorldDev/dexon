@@ -113,6 +113,14 @@ type txPool interface {
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
 }
 
+type p2pServer interface {
+	Self() *discover.Node
+
+	AddNotaryPeer(*discover.Node)
+
+	RemoveNotaryPeer(*discover.Node)
+}
+
 // statusData is the network packet for the status message.
 type statusData struct {
 	ProtocolVersion uint32
