@@ -31,7 +31,13 @@ func (n *DexconNetwork) SendDKGPrivateShare(
 
 // BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
 func (n *DexconNetwork) BroadcastDKGPrivateShare(
-	prvShare *types.DKGPrivateShare)  {
+	prvShare *types.DKGPrivateShare) {
+}
+
+// BroadcastDKGPartialSignature broadcasts partialSignature to all
+// DKG participants.
+func (n *DexconNetwork) BroadcastDKGPartialSignature(
+	psig *types.DKGPartialSignature) {
 }
 
 // ReceiveChan returns a channel to receive messages from DEXON network.

@@ -2,6 +2,7 @@ package dex
 
 import (
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+	"github.com/dexon-foundation/dexon-consensus-core/crypto"
 )
 
 type DexconGovernance struct {
@@ -22,6 +23,17 @@ func (d *DexconGovernance) GetNotarySet(
 // GetTotalOrderingK return the total ordering K constant.
 func (d *DexconGovernance) GetConfiguration(blockHeight uint64) *types.Config {
 	return &types.Config{}
+}
+
+// Porpose a ThresholdSignature of round.
+func (d *DexconGovernance) ProposeThresholdSignature(
+	round uint64, signature crypto.Signature) {
+}
+
+// Get a ThresholdSignature of round.
+func (d *DexconGovernance) GetThresholdSignature(round uint64) (
+	crypto.Signature, bool) {
+	return crypto.Signature{}, true
 }
 
 // AddDKGComplaint adds a DKGComplaint.
