@@ -25,15 +25,14 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/swarm/storage/feed/lookup"
-
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/swarm/api"
-	swarmhttp "github.com/ethereum/go-ethereum/swarm/api/http"
-	"github.com/ethereum/go-ethereum/swarm/multihash"
-	"github.com/ethereum/go-ethereum/swarm/storage/feed"
-	"github.com/ethereum/go-ethereum/swarm/testutil"
+	"github.com/dexon-foundation/dexon/common"
+	"github.com/dexon-foundation/dexon/crypto"
+	"github.com/dexon-foundation/dexon/swarm/api"
+	swarmhttp "github.com/dexon-foundation/dexon/swarm/api/http"
+	"github.com/dexon-foundation/dexon/swarm/multihash"
+	"github.com/dexon-foundation/dexon/swarm/storage/feed"
+	"github.com/dexon-foundation/dexon/swarm/storage/feed/lookup"
+	"github.com/dexon-foundation/dexon/swarm/testutil"
 )
 
 func serverFunc(api *api.API) testutil.TestServer {

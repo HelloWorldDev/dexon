@@ -24,8 +24,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/dexon-foundation/dexon/p2p/enode"
+	"github.com/dexon-foundation/dexon/p2p/enr"
 )
 
 func newTestTable(t transport) (*Table, *enode.DB) {
