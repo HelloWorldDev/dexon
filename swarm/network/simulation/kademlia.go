@@ -21,11 +21,11 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/ethereum/go-ethereum/p2p/discover"
+	"github.com/dexon-foundation/dexon/p2p/discover"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/swarm/network"
+	"github.com/dexon-foundation/dexon/common"
+	"github.com/dexon-foundation/dexon/log"
+	"github.com/dexon-foundation/dexon/swarm/network"
 )
 
 // BucketKeyKademlia is the key to be used for storing the kademlia

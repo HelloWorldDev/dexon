@@ -21,9 +21,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/crypto/sha3"
-	"github.com/ethereum/go-ethereum/swarm/chunk"
-	"github.com/ethereum/go-ethereum/swarm/storage/encryption"
+	"github.com/dexon-foundation/dexon/crypto/sha3"
+	"github.com/dexon-foundation/dexon/swarm/chunk"
+	"github.com/dexon-foundation/dexon/swarm/storage/encryption"
 )
 
 type hasherStore struct {

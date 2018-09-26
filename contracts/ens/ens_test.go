@@ -20,11 +20,11 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind/backends"
-	"github.com/ethereum/go-ethereum/contracts/ens/contract"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/dexon-foundation/dexon/accounts/abi/bind"
+	"github.com/dexon-foundation/dexon/accounts/abi/bind/backends"
+	"github.com/dexon-foundation/dexon/contracts/ens/contract"
+	"github.com/dexon-foundation/dexon/core"
+	"github.com/dexon-foundation/dexon/crypto"
 )
 
 var (

@@ -17,7 +17,7 @@
 package mru
 
 import (
-	"github.com/ethereum/go-ethereum/swarm/storage"
+	"github.com/dexon-foundation/dexon/swarm/storage"
 )
 
 // updateHeader models the non-payload components of a Resource Update

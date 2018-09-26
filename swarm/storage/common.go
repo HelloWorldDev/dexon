@@ -19,7 +19,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/swarm/log"
+	"github.com/dexon-foundation/dexon/swarm/log"
 )
 
 // PutChunks adds chunks  to localstore

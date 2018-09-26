@@ -26,7 +26,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/crypto/sha3"
+	"github.com/dexon-foundation/dexon/crypto/sha3"
 )
 
 /*
