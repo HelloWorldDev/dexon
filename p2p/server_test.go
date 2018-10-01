@@ -173,13 +173,9 @@ func TestServerDial(t *testing.T) {
 			}
 
 			// Test AddTrustedPeer/RemoveTrustedPeer and changing Trusted flags
-			// Test AddNotaryPeer/RemoveTrustedPeer and changing Notary flags.
 			// Particularly for race conditions on changing the flag state.
 			if peer := srv.Peers()[0]; peer.Info().Network.Trusted {
 				t.Errorf("peer is trusted prematurely: %v", peer)
-			}
-			if peer := srv.Peers()[0]; peer.Info().Network.Notary {
-				t.Errorf("peer is notary prematurely: %v", peer)
 			}
 			done := make(chan bool)
 			go func() {
@@ -192,14 +188,6 @@ func TestServerDial(t *testing.T) {
 					t.Errorf("peer is trusted after RemoveTrustedPeer: %v", peer)
 				}
 
-				srv.AddNotaryPeer(node)
-				if peer := srv.Peers()[0]; !peer.Info().Network.Notary {
-					t.Errorf("peer is not notary after AddNotaryPeer: %v", peer)
-				}
-				srv.RemoveNotaryPeer(node)
-				if peer := srv.Peers()[0]; peer.Info().Network.Notary {
-					t.Errorf("peer is notary after RemoveNotaryPeer: %v", peer)
-				}
 				done <- true
 			}()
 			// Trigger potential race conditions
@@ -216,70 +204,88 @@ func TestServerDial(t *testing.T) {
 	}
 }
 
-// TestNotaryPeer checks that the node is added to and remove from static when
-// AddNotaryPeer and RemoveNotaryPeer is called.
-func TestNotaryPeer(t *testing.T) {
-	var (
-		returned    = make(chan struct{})
-		add, remove = make(chan *discover.Node), make(chan *discover.Node)
-		tg          = taskgen{
-			newFunc: func(running int, peers map[discover.NodeID]*Peer) []task {
-				return []task{}
-			},
-			doneFunc: func(t task) {},
-			addFunc: func(n *discover.Node) {
-				add <- n
-			},
-			removeFunc: func(n *discover.Node) {
-				remove <- n
-			},
-		}
-	)
-
+func TestServerPeerConnFlag(t *testing.T) {
 	srv := &Server{
-		Config:       Config{MaxPeers: 10},
-		quit:         make(chan struct{}),
-		ntab:         fakeTable{},
-		addnotary:    make(chan *discover.Node),
-		removenotary: make(chan *discover.Node),
-		running:      true,
-		log:          log.New(),
+		Config: Config{
+			PrivateKey: newkey(),
+			MaxPeers:   10,
+			NoDial:     true,
+		},
 	}
-	srv.loopWG.Add(1)
-	go func() {
-		srv.run(tg)
-		close(returned)
-	}()
-
-	notaryID := randomID()
-	go srv.AddNotaryPeer(&discover.Node{ID: notaryID})
-
-	select {
-	case n := <-add:
-		if n.ID != notaryID {
-			t.Errorf("node ID mismatched: got %s, want %s",
-				n.ID.String(), notaryID.String())
-		}
-	case <-time.After(1 * time.Second):
-		t.Error("add static is not called within one second")
+	if err := srv.Start(); err != nil {
+		t.Fatalf("could not start: %v", err)
 	}
+	defer srv.Stop()
 
-	go srv.RemoveNotaryPeer(&discover.Node{ID: notaryID})
-	select {
-	case n := <-remove:
-		if n.ID != notaryID {
-			t.Errorf("node ID mismatched: got %s, want %s",
-				n.ID.String(), notaryID.String())
-		}
-	case <-time.After(1 * time.Second):
-		t.Error("remove static is not called within one second")
+	// inject a peer
+	id := uintID(1)
+	fd, _ := net.Pipe()
+	c := &conn{
+		id:        id,
+		fd:        fd,
+		transport: newTestTransport(id, fd),
+		flags:     inboundConn,
+		cont:      make(chan error),
+	}
+	if err := srv.checkpoint(c, srv.addpeer); err != nil {
+		t.Fatalf("could not add conn: %v", err)
+	}
+	node := &discover.Node{ID: id}
+
+	srv.AddTrustedPeer(node)
+	srv.Peers() // leverage this function to ensure trusted peer is added
+	if c.flags != (inboundConn | trustedConn) {
+		t.Errorf("flags mismatch: got %d, want %d",
+			c.flags, (inboundConn | trustedConn))
 	}
 
-	srv.Stop()
-	select {
-	case <-returned:
-	case <-time.After(500 * time.Millisecond):
-		t.Error("Server.run did not return within 500ms")
+	srv.AddDirectPeer(node)
+	srv.Peers() // leverage this function to ensure trusted peer is added
+	if c.flags != (inboundConn | trustedConn | directDialedConn) {
+		t.Errorf("flags mismatch: got %d, want %d",
+			c.flags, (inboundConn | trustedConn | directDialedConn))
+	}
+
+	srv.AddGroup("g1", []*discover.Node{node}, 1)
+	srv.Peers() // leverage this function to ensure trusted peer is added
+	if c.flags != (inboundConn | trustedConn | directDialedConn | groupDialedConn) {
+		t.Errorf("flags mismatch: got %d, want %d",
+			c.flags, (inboundConn | trustedConn | directDialedConn | groupDialedConn))
+	}
+
+	srv.AddGroup("g2", []*discover.Node{node}, 1)
+	srv.Peers() // leverage this function to ensure trusted peer is added
+	if c.flags != (inboundConn | trustedConn | directDialedConn | groupDialedConn) {
+		t.Errorf("flags mismatch: got %d, want %d",
+			c.flags, (inboundConn | trustedConn | directDialedConn | groupDialedConn))
+	}
+
+	srv.RemoveTrustedPeer(node)
+	srv.Peers() // leverage this function to ensure trusted peer is added
+	if c.flags != (inboundConn | directDialedConn | groupDialedConn) {
+		t.Errorf("flags mismatch: got %d, want %d",
+			c.flags, (inboundConn | directDialedConn | directDialedConn))
+	}
+
+	srv.RemoveDirectPeer(node)
+	srv.Peers() // leverage this function to ensure trusted peer is added
+	if c.flags != (inboundConn | groupDialedConn) {
+		t.Errorf("flags mismatch: got %d, want %d",
+			c.flags, (inboundConn | directDialedConn))
+	}
+
+	srv.RemoveGroup("g1")
+	srv.Peers() // leverage this function to ensure trusted peer is added
+	if c.flags != (inboundConn | groupDialedConn) {
+		t.Errorf("flags mismatch: got %d, want %d",
+			c.flags, (inboundConn | directDialedConn))
+	}
+
+	srv.RemoveGroup("g2")
+	srv.Peers() // leverage this function to ensure trusted peer is added
+	if c.flags != inboundConn {
+		t.Errorf("flags mismatch: got %d, want %d",
+			c.flags, inboundConn)
 	}
 }
 
@@ -401,9 +407,6 @@ func TestServerManyTasks(t *testing.T) {
 type taskgen struct {
 	newFunc  func(running int, peers map[discover.NodeID]*Peer) []task
 	doneFunc func(task)
-
-	addFunc    func(*discover.Node)
-	removeFunc func(*discover.Node)
 }
 
 func (tg taskgen) newTasks(running int, peers map[discover.NodeID]*Peer, now time.Time) []task {
@@ -412,11 +415,17 @@ func (tg taskgen) newTasks(running int, peers map[discover.NodeID]*Peer, now tim
 func (tg taskgen) taskDone(t task, now time.Time) {
 	tg.doneFunc(t)
 }
-func (tg taskgen) addStatic(n *discover.Node) {
-	tg.addFunc(n)
+func (tg taskgen) addStatic(*discover.Node) {
 }
-func (tg taskgen) removeStatic(n *discover.Node) {
-	tg.removeFunc(n)
+func (tg taskgen) removeStatic(*discover.Node) {
+}
+func (tg taskgen) addDirect(*discover.Node) {
+}
+func (tg taskgen) removeDirect(*discover.Node) {
+}
+func (tg taskgen) addGroup(*dialGroup) {
+}
+func (tg taskgen) removeGroup(*dialGroup) {
 }
 
 type testTask struct {
@@ -430,10 +439,9 @@ func (t *testTask) Do(srv *Server) {
 
 // This test checks that connections are disconnected
 // just after the encryption handshake when the server is
-// at capacity. Trusted and Notary connections should still be accepted.
+// at capacity. Trusted connections should still be accepted.
 func TestServerAtCap(t *testing.T) {
 	trustedID := randomID()
-	notaryID := randomID()
 	srv := &Server{
 		Config: Config{
 			PrivateKey:   newkey(),
@@ -446,7 +454,6 @@ func TestServerAtCap(t *testing.T) {
 		t.Fatalf("could not start: %v", err)
 	}
 	defer srv.Stop()
-	srv.AddNotaryPeer(&discover.Node{ID: notaryID})
 
 	newconn := func(id discover.NodeID) *conn {
 		fd, _ := net.Pipe()
@@ -476,15 +483,6 @@ func TestServerAtCap(t *testing.T) {
 		t.Error("Server did not set trusted flag")
 	}
 
-	// Try inserting a notary connection.
-	c = newconn(notaryID)
-	if err := srv.checkpoint(c, srv.posthandshake); err != nil {
-		t.Error("unexpected error for notary conn @posthandshake:", err)
-	}
-	if !c.is(notaryConn) {
-		t.Error("Server did not set notary flag")
-	}
-
 	// Remove from trusted set and try again
 	srv.RemoveTrustedPeer(&discover.Node{ID: trustedID})
 	c = newconn(trustedID)
@@ -500,24 +498,6 @@ func TestServerAtCap(t *testing.T) {
 	}
 	if !c.is(trustedConn) {
 		t.Error("Server did not set trusted flag")
-	}
-
-	// Remove from notary set and try again
-	srv.RemoveNotaryPeer(&discover.Node{ID: notaryID})
-	c = newconn(notaryID)
-	if err := srv.checkpoint(c, srv.posthandshake); err != DiscTooManyPeers {
-		t.Error("wrong error for insert:", err)
-	}
-
-	// Add anotherID to notary set and try again
-	anotherNotaryID := randomID()
-	srv.AddNotaryPeer(&discover.Node{ID: anotherNotaryID})
-	c = newconn(anotherNotaryID)
-	if err := srv.checkpoint(c, srv.posthandshake); err != nil {
-		t.Error("unexpected error for notary conn @posthandshake:", err)
-	}
-	if !c.is(notaryConn) {
-		t.Error("Server did not set notary flag")
 	}
 }
 

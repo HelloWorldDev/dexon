@@ -1,144 +1,627 @@
 package dex
 
-import "testing"
+import (
+	"fmt"
+	"math/big"
+	"testing"
 
-func TestPeerSetAddNotaryPeer(t *testing.T) {
-	ps := newPeerSet()
-	ps.SetRound(10)
+	mapset "github.com/deckarep/golang-set"
+	"github.com/dexon-foundation/dexon/p2p/discover"
+)
 
-	p := &peer{id: "register peer"}
+func TestPeerSetBuildAndForgetNotaryConn(t *testing.T) {
+	self := discover.Node{ID: nodeID(0)}
+	server := newTestP2PServer(&self)
+	table := newNodeTable()
 
-	if err := ps.Register(p); err != nil {
-		t.Fatalf("register peer fail: %v", err)
+	gov := &testGovernance{
+		getChainNumFunc: func(uint64) uint32 {
+			return 3
+		},
 	}
 
-	tests := []struct {
-		round uint64
-		p     *peer
-		err   error
-		ok    bool
-		pp    *peer
-	}{
-		{10, p, nil, true, p},
-		{9, p, errInvalidRound, false, nil},
-		{13, p, errInvalidRound, false, nil},
-		{10, &peer{id: "not register peer"}, errNotRegistered, false, nil},
+	round10 := [][]discover.NodeID{
+		[]discover.NodeID{nodeID(0), nodeID(1), nodeID(2)},
+		[]discover.NodeID{nodeID(1), nodeID(3)},
+		[]discover.NodeID{nodeID(2), nodeID(4)},
+	}
+	round11 := [][]discover.NodeID{
+		[]discover.NodeID{nodeID(0), nodeID(1), nodeID(5)},
+		[]discover.NodeID{nodeID(5), nodeID(6)},
+		[]discover.NodeID{nodeID(0), nodeID(2), nodeID(4)},
+	}
+	round12 := [][]discover.NodeID{
+		[]discover.NodeID{nodeID(0), nodeID(3), nodeID(5)},
+		[]discover.NodeID{nodeID(0), nodeID(7), nodeID(8)},
+		[]discover.NodeID{nodeID(0), nodeID(2), nodeID(6)},
 	}
 
-	for _, tt := range tests {
-		err := ps.AddNotaryPeer(tt.round, tt.p)
-		if err != tt.err {
-			t.Errorf("err mismatch: got %v, want %v", err, tt.err)
+	gov.getNotarySetFunc = func(cid uint32, round uint64) map[string]struct{} {
+		m := map[uint64][][]discover.NodeID{
+			10: round10,
+			11: round11,
+			12: round12,
 		}
+		return newTestNodeSet(m[round][cid])
+	}
 
-		p, ok := ps.notaryPeers[tt.round][tt.p.id]
+	ps := newPeerSet(gov, server, table)
+	peer1 := newDummyPeer(nodeID(1))
+	peer2 := newDummyPeer(nodeID(2))
+	var err error
+	err = ps.Register(peer1)
+	if err != nil {
+		t.Error(err)
+	}
+	err = ps.Register(peer2)
+	if err != nil {
+		t.Error(err)
+	}
 
-		if ok != tt.ok {
-			t.Errorf("lookup ok mismatched, got %v, want %v", ok, tt.ok)
+	// build round 10
+	ps.BuildNotaryConn(10)
+
+	err = checkLabels(peer1, []peerLabel{
+		peerLabel{notaryset, 0, 10},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{
+		peerLabel{notaryset, 0, 10},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{
+		nodeID(1).String(): []peerLabel{
+			peerLabel{notaryset, 0, 10},
+		},
+		nodeID(2).String(): []peerLabel{
+			peerLabel{notaryset, 0, 10},
+		},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{10}, notaryset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{
+		nodeID(1), nodeID(2),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkGroup(server, []string{
+		notarySetName(1, 10),
+		notarySetName(2, 10),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// build round 11
+	ps.BuildNotaryConn(11)
+
+	err = checkLabels(peer1, []peerLabel{
+		peerLabel{notaryset, 0, 10},
+		peerLabel{notaryset, 0, 11},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{
+		peerLabel{notaryset, 0, 10},
+		peerLabel{notaryset, 2, 11},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{
+		nodeID(1).String(): []peerLabel{
+			peerLabel{notaryset, 0, 10},
+			peerLabel{notaryset, 0, 11},
+		},
+		nodeID(2).String(): []peerLabel{
+			peerLabel{notaryset, 0, 10},
+			peerLabel{notaryset, 2, 11},
+		},
+		nodeID(4).String(): []peerLabel{
+			peerLabel{notaryset, 2, 11},
+		},
+		nodeID(5).String(): []peerLabel{
+			peerLabel{notaryset, 0, 11},
+		},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{10, 11}, notaryset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{
+		nodeID(1), nodeID(2), nodeID(4), nodeID(5),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkGroup(server, []string{
+		notarySetName(1, 10),
+		notarySetName(2, 10),
+		notarySetName(1, 11),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// build round 12
+	ps.BuildNotaryConn(12)
+
+	err = checkLabels(peer1, []peerLabel{
+		peerLabel{notaryset, 0, 10},
+		peerLabel{notaryset, 0, 11},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{
+		peerLabel{notaryset, 0, 10},
+		peerLabel{notaryset, 2, 11},
+		peerLabel{notaryset, 2, 12},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{
+		nodeID(1).String(): []peerLabel{
+			peerLabel{notaryset, 0, 10},
+			peerLabel{notaryset, 0, 11},
+		},
+		nodeID(2).String(): []peerLabel{
+			peerLabel{notaryset, 0, 10},
+			peerLabel{notaryset, 2, 11},
+			peerLabel{notaryset, 2, 12},
+		},
+		nodeID(3).String(): []peerLabel{
+			peerLabel{notaryset, 0, 12},
+		},
+		nodeID(4).String(): []peerLabel{
+			peerLabel{notaryset, 2, 11},
+		},
+		nodeID(5).String(): []peerLabel{
+			peerLabel{notaryset, 0, 11},
+			peerLabel{notaryset, 0, 12},
+		},
+		nodeID(6).String(): []peerLabel{
+			peerLabel{notaryset, 2, 12},
+		},
+		nodeID(7).String(): []peerLabel{
+			peerLabel{notaryset, 1, 12},
+		},
+		nodeID(8).String(): []peerLabel{
+			peerLabel{notaryset, 1, 12},
+		},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{10, 11, 12}, notaryset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{
+		nodeID(1), nodeID(2), nodeID(3), nodeID(4),
+		nodeID(5), nodeID(6), nodeID(7), nodeID(8),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkGroup(server, []string{
+		notarySetName(1, 10),
+		notarySetName(2, 10),
+		notarySetName(1, 11),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// forget round 11
+	ps.ForgetNotaryConn(11)
+
+	err = checkLabels(peer1, []peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{
+		peerLabel{notaryset, 2, 12},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{
+		nodeID(2).String(): []peerLabel{
+			peerLabel{notaryset, 2, 12},
+		},
+		nodeID(3).String(): []peerLabel{
+			peerLabel{notaryset, 0, 12},
+		},
+		nodeID(5).String(): []peerLabel{
+			peerLabel{notaryset, 0, 12},
+		},
+		nodeID(6).String(): []peerLabel{
+			peerLabel{notaryset, 2, 12},
+		},
+		nodeID(7).String(): []peerLabel{
+			peerLabel{notaryset, 1, 12},
+		},
+		nodeID(8).String(): []peerLabel{
+			peerLabel{notaryset, 1, 12},
+		},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{12}, notaryset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{
+		nodeID(2), nodeID(3),
+		nodeID(5), nodeID(6), nodeID(7), nodeID(8),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkGroup(server, []string{})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// forget round 12
+	ps.ForgetNotaryConn(12)
+	err = checkLabels(peer1, []peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{}, notaryset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkGroup(server, []string{})
+	if err != nil {
+		t.Error(err)
+	}
+
+}
+
+func TestPeerSetBuildDKGConn(t *testing.T) {
+	self := discover.Node{ID: nodeID(0)}
+	server := newTestP2PServer(&self)
+	table := newNodeTable()
+
+	gov := &testGovernance{}
+
+	gov.getDKGSetFunc = func(round uint64) map[string]struct{} {
+		m := map[uint64][]discover.NodeID{
+			10: []discover.NodeID{nodeID(0), nodeID(1), nodeID(2)},
+			11: []discover.NodeID{nodeID(1), nodeID(2), nodeID(5)},
+			12: []discover.NodeID{nodeID(0), nodeID(3), nodeID(5)},
 		}
+		return newTestNodeSet(m[round])
+	}
 
-		if p != tt.pp {
-			t.Errorf("lookup peer mismatched, got %v, want %v", p, tt.pp)
-		}
+	ps := newPeerSet(gov, server, table)
+	peer1 := newDummyPeer(nodeID(1))
+	peer2 := newDummyPeer(nodeID(2))
+	var err error
+	err = ps.Register(peer1)
+	if err != nil {
+		t.Error(err)
+	}
+	err = ps.Register(peer2)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// build round 10
+	ps.BuildDKGConn(10)
+
+	err = checkLabels(peer1, []peerLabel{
+		peerLabel{dkgset, 0, 10},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{
+		peerLabel{dkgset, 0, 10},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{
+		nodeID(1).String(): []peerLabel{
+			peerLabel{dkgset, 0, 10},
+		},
+		nodeID(2).String(): []peerLabel{
+			peerLabel{dkgset, 0, 10},
+		},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{10}, dkgset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{
+		nodeID(1), nodeID(2),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// build round 11
+	ps.BuildDKGConn(11)
+
+	err = checkLabels(peer1, []peerLabel{
+		peerLabel{dkgset, 0, 10},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{
+		peerLabel{dkgset, 0, 10},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{
+		nodeID(1).String(): []peerLabel{
+			peerLabel{dkgset, 0, 10},
+		},
+		nodeID(2).String(): []peerLabel{
+			peerLabel{dkgset, 0, 10},
+		},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{10}, dkgset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{
+		nodeID(1), nodeID(2),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// build round 12
+	ps.BuildDKGConn(12)
+
+	err = checkLabels(peer1, []peerLabel{
+		peerLabel{dkgset, 0, 10},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{
+		peerLabel{dkgset, 0, 10},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{
+		nodeID(1).String(): []peerLabel{
+			peerLabel{dkgset, 0, 10},
+		},
+		nodeID(2).String(): []peerLabel{
+			peerLabel{dkgset, 0, 10},
+		},
+		nodeID(3).String(): []peerLabel{
+			peerLabel{dkgset, 0, 12},
+		},
+		nodeID(5).String(): []peerLabel{
+			peerLabel{dkgset, 0, 12},
+		},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{10, 12}, dkgset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{
+		nodeID(1), nodeID(2), nodeID(3), nodeID(5),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// forget round 11
+	ps.ForgetDKGConn(11)
+
+	err = checkLabels(peer1, []peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{
+		nodeID(3).String(): []peerLabel{
+			peerLabel{dkgset, 0, 12},
+		},
+		nodeID(5).String(): []peerLabel{
+			peerLabel{dkgset, 0, 12},
+		},
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{12}, dkgset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{
+		nodeID(3), nodeID(5),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// forget round 12
+	ps.ForgetDKGConn(12)
+	err = checkLabels(peer1, []peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkLabels(peer2, []peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerLabels(ps, map[string][]peerLabel{})
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkPeerSetHistory(ps, []uint64{}, dkgset)
+	if err != nil {
+		t.Error(err)
+	}
+	err = checkDirectPeer(server, []discover.NodeID{})
+	if err != nil {
+		t.Error(err)
 	}
 }
 
-func TestPeerSetNotaryPeer(t *testing.T) {
-	ps := newPeerSet()
-	notaryPeers := map[uint64]map[string]*peer{
-		10: map[string]*peer{
-			"r10p1": &peer{id: "r10p1"},
-			"r10p2": &peer{id: "r10p2"},
-		},
-		11: map[string]*peer{
-			"r11p1": &peer{id: "r11p1"},
-			"r11p2": &peer{id: "r11p2"},
-		},
+func checkLabels(p *peer, want []peerLabel) error {
+	if p.labels.Cardinality() != len(want) {
+		return fmt.Errorf("num of labels mismatch: got %d, want %d",
+			p.labels.Cardinality(), len(want))
 	}
 
-	for _, peers := range notaryPeers {
-		for _, p := range peers {
-			if err := ps.Register(p); err != nil {
-				t.Errorf("register peer fail: %v", err)
-			}
+	for _, label := range want {
+		if !p.labels.Contains(label) {
+			return fmt.Errorf("label %+v not exist", label)
 		}
 	}
-
-	ps.notaryPeers = notaryPeers
-
-	tests := []struct {
-		round uint64
-		peers map[string]struct{}
-	}{
-		{10, map[string]struct{}{
-			"r10p1": struct{}{},
-			"r10p2": struct{}{},
-		}},
-		{11, map[string]struct{}{
-			"r11p1": struct{}{},
-			"r11p2": struct{}{},
-		}},
-		{12, map[string]struct{}{}},
-	}
-
-	for _, tt := range tests {
-		peers := ps.NotaryPeers(tt.round)
-
-		if len(peers) != len(tt.peers) {
-			t.Errorf("notary peers num mismatched, got %d, want %d",
-				len(peers), len(tt.peers))
-		}
-
-		for _, p := range peers {
-			if _, ok := tt.peers[p.id]; !ok {
-				t.Errorf("peer %s not in notary peers", p.id)
-			}
-		}
-	}
+	return nil
 }
 
-func TestPeerSetSetRound(t *testing.T) {
-	ps := newPeerSet()
-	notaryPeers := map[uint64]map[string]*peer{
-		10: map[string]*peer{
-			"r10p1": &peer{id: "r10p1"},
-			"r10p2": &peer{id: "r10p2"},
-		},
-		11: map[string]*peer{
-			"r11p1": &peer{id: "r11p1"},
-			"r11p2": &peer{id: "r11p2"},
-		},
-		12: map[string]*peer{
-			"r12p1": &peer{id: "r12p1"},
-			"r12p2": &peer{id: "r12p2"},
-		},
+func checkPeerLabels(ps *peerSet, want map[string][]peerLabel) error {
+	if len(ps.peerLabels) != len(want) {
+		return fmt.Errorf("peer num mismatch: got %d, want %d",
+			len(ps.peerLabels), len(want))
 	}
 
-	for _, peers := range notaryPeers {
-		for _, p := range peers {
-			if err := ps.Register(p); err != nil {
-				t.Errorf("register peer fail: %v", err)
+	for peerID, gotLabels := range ps.peerLabels {
+		wantLabels, ok := want[peerID]
+		if !ok {
+			return fmt.Errorf("peer id %s not exists", peerID)
+		}
+
+		if len(gotLabels) != len(wantLabels) {
+			return fmt.Errorf(
+				"num of labels of peer id %s mismatch: got %d, want %d",
+				peerID, len(gotLabels), len(wantLabels))
+		}
+
+		for _, label := range wantLabels {
+			if _, ok := gotLabels[label]; !ok {
+				fmt.Errorf("label: %+v not exists", label)
 			}
 		}
 	}
+	return nil
+}
 
-	ps.notaryPeers = notaryPeers
-	ps.round = 10
-
-	if err := ps.SetRound(9); err != errInvalidRound {
-		t.Errorf("got %v, want %v", err, errInvalidRound)
+func checkPeerSetHistory(ps *peerSet, want []uint64, set setType) error {
+	var history map[uint64]struct{}
+	switch set {
+	case notaryset:
+		history = ps.notaryHistory
+	case dkgset:
+		history = ps.dkgHistory
+	default:
+		return fmt.Errorf("invalid set: %d", set)
 	}
 
-	if err := ps.SetRound(12); err != nil {
-		t.Errorf("set round fail: %v", err)
+	if len(history) != len(want) {
+		return fmt.Errorf("num of history mismatch: got %d, want %d",
+			len(history), len(want))
 	}
 
-	if len(ps.notaryPeers) != 1 {
-		t.Errorf("notary peers not clear correctly, round num got %d, want %d",
-			len(ps.notaryPeers), 1)
+	for _, r := range want {
+		if _, ok := history[r]; !ok {
+			return fmt.Errorf("round %d not exists", r)
+		}
+	}
+	return nil
+}
+
+func checkDirectPeer(srvr *testP2PServer, want []discover.NodeID) error {
+	if len(srvr.direct) != len(want) {
+		return fmt.Errorf("num of direct peer mismatch: got %d, want %d",
+			len(srvr.direct), len(want))
 	}
 
-	if ps.round != 12 {
-		t.Errorf("round mismatched: got %d, want %d", ps.round, 12)
+	for _, id := range want {
+		if _, ok := srvr.direct[id]; !ok {
+			return fmt.Errorf("direct peer %s not exists", id.String())
+		}
+	}
+	return nil
+}
+func checkGroup(srvr *testP2PServer, want []string) error {
+	if len(srvr.group) != len(want) {
+		return fmt.Errorf("num of group mismatch: got %d, want %d",
+			len(srvr.group), len(want))
+	}
+
+	for _, name := range want {
+		if _, ok := srvr.group[name]; !ok {
+			return fmt.Errorf("group %s not exists", name)
+		}
+	}
+	return nil
+}
+
+func nodeID(n int64) discover.NodeID {
+	b := big.NewInt(n).Bytes()
+	var id discover.NodeID
+	copy(id[len(id)-len(b):], b)
+	return id
+}
+
+func newTestNodeSet(nodes []discover.NodeID) map[string]struct{} {
+	m := make(map[string]struct{})
+	for _, node := range nodes {
+		m[node.String()] = struct{}{}
+	}
+	return m
+}
+
+func newDummyPeer(id discover.NodeID) *peer {
+	return &peer{
+		labels: mapset.NewSet(),
+		id:     id.String(),
 	}
 }

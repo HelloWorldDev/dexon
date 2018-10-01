@@ -46,3 +46,10 @@ type ChainSideEvent struct {
 }
 
 type ChainHeadEvent struct{ Block *types.Block }
+
+type NewNotarySetEvent struct {
+	Round   uint64
+	Pubkeys map[string]struct{} // pubkeys in hex format
+}
+
+type NextRoundEvent struct{ Round uint64 }

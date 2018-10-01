@@ -20,9 +20,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"net"
 
-	"github.com/dexon-foundation/dexon/crypto/sha3"
 	"github.com/dexon-foundation/dexon/common"
 	"github.com/dexon-foundation/dexon/core"
 	"github.com/dexon-foundation/dexon/core/types"
@@ -66,7 +64,7 @@ const (
 	ReceiptsMsg    = 0x10
 
 	// Protocol messages belonging to dex/64
-	NotaryNodeInfoMsg = 0x11
+	MetaMsg = 0x11
 )
 
 type errCode int
@@ -113,12 +111,24 @@ type txPool interface {
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription
 }
 
+type governance interface {
+	GetChainNum(uint64) uint32
+
+	GetNotarySet(uint32, uint64) map[string]struct{}
+
+	GetDKGSet(uint64) map[string]struct{}
+}
+
 type p2pServer interface {
 	Self() *discover.Node
 
-	AddNotaryPeer(*discover.Node)
+	AddDirectPeer(*discover.Node)
 
-	RemoveNotaryPeer(*discover.Node)
+	RemoveDirectPeer(*discover.Node)
+
+	AddGroup(string, []*discover.Node, uint64)
+
+	RemoveGroup(string)
 }
 
 // statusData is the network packet for the status message.
@@ -194,22 +204,3 @@ type blockBody struct {
 
 // blockBodiesData is the network packet for block content distribution.
 type blockBodiesData []*blockBody
-
-// TODO(sonic): revisit this msg when dexon core SDK is finalized.
-// notartyNodeInfo is the network packet for notary node ip info.
-type notaryNodeInfo struct {
-	ID        discover.NodeID
-	IP        net.IP
-	UDP       uint16
-	TCP       uint16
-	Round     uint64
-	Sig       []byte
-	Timestamp int64
-}
-
-func (n *notaryNodeInfo) Hash() (h common.Hash) {
-	hw := sha3.NewKeccak256()
-	rlp.Encode(hw, n)
-	hw.Sum(h[:0])
-	return h
-}

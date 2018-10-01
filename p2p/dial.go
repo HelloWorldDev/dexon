@@ -65,6 +65,12 @@ func (t TCPDialer) Dial(dest *discover.Node) (net.Conn, error) {
 	return t.Dialer.Dial("tcp", addr.String())
 }
 
+type dialGroup struct {
+	name  string
+	nodes map[discover.NodeID]*discover.Node
+	num   uint64
+}
+
 // dialstate schedules dials and discovery lookups.
 // it get's a chance to compute new tasks on every iteration
 // of the main loop in Server.run.
@@ -78,6 +84,8 @@ type dialstate struct {
 	lookupBuf     []*discover.Node // current discovery lookup results
 	randomNodes   []*discover.Node // filled from Table
 	static        map[discover.NodeID]*dialTask
+	direct        map[discover.NodeID]*dialTask
+	group         map[string]*dialGroup
 	hist          *dialHistory
 
 	start     time.Time        // time when the dialer was first used
@@ -133,6 +141,8 @@ func newDialState(static []*discover.Node, bootnodes []*discover.Node, ntab disc
 		ntab:        ntab,
 		netrestrict: netrestrict,
 		static:      make(map[discover.NodeID]*dialTask),
+		direct:      make(map[discover.NodeID]*dialTask),
+		group:       make(map[string]*dialGroup),
 		dialing:     make(map[discover.NodeID]connFlag),
 		bootnodes:   make([]*discover.Node, len(bootnodes)),
 		randomNodes: make([]*discover.Node, maxdyn/2),
@@ -157,6 +167,23 @@ func (s *dialstate) removeStatic(n *discover.Node) {
 	// This removes a previous dial timestamp so that application
 	// can force a server to reconnect with chosen peer immediately.
 	s.hist.remove(n.ID)
+}
+
+func (s *dialstate) addDirect(n *discover.Node) {
+	s.direct[n.ID] = &dialTask{flags: directDialedConn, dest: n}
+}
+
+func (s *dialstate) removeDirect(n *discover.Node) {
+	delete(s.direct, n.ID)
+	s.hist.remove(n.ID)
+}
+
+func (s *dialstate) addGroup(g *dialGroup) {
+	s.group[g.name] = g
+}
+
+func (s *dialstate) removeGroup(g *dialGroup) {
+	delete(s.group, g.name)
 }
 
 func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now time.Time) []task {
@@ -203,6 +230,62 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 			newtasks = append(newtasks, t)
 		}
 	}
+
+	for id, t := range s.direct {
+		err := s.checkDial(t.dest, peers)
+		switch err {
+		case errNotWhitelisted, errSelf:
+			log.Warn("Removing direct dial candidate", "id", t.dest.ID, "addr", &net.TCPAddr{IP: t.dest.IP, Port: int(t.dest.TCP)}, "err", err)
+			delete(s.direct, t.dest.ID)
+		case nil:
+			s.dialing[id] = t.flags
+			newtasks = append(newtasks, t)
+		}
+	}
+
+	// compute connected
+	connected := map[string]map[discover.NodeID]struct{}{}
+	for _, g := range s.group {
+		connected[g.name] = map[discover.NodeID]struct{}{}
+	}
+
+	for id := range peers {
+		for _, g := range s.group {
+			if _, ok := g.nodes[id]; ok {
+				connected[g.name][id] = struct{}{}
+			}
+		}
+	}
+
+	for id := range s.dialing {
+		for _, g := range s.group {
+			if _, ok := g.nodes[id]; ok {
+				connected[g.name][id] = struct{}{}
+			}
+		}
+	}
+
+	groupNodes := map[discover.NodeID]*discover.Node{}
+	for _, g := range s.group {
+		for _, n := range g.nodes {
+			if uint64(len(connected[g.name])) >= g.num {
+				break
+			}
+			err := s.checkDial(n, peers)
+			switch err {
+			case errNotWhitelisted, errSelf:
+				log.Warn("Removing group dial candidate", "id", n.ID, "addr", &net.TCPAddr{IP: n.IP, Port: int(n.TCP)}, "err", err)
+				delete(g.nodes, n.ID)
+			case nil:
+				groupNodes[n.ID] = n
+				connected[g.name][n.ID] = struct{}{}
+			}
+		}
+	}
+	for _, n := range groupNodes {
+		addDial(groupDialedConn, n)
+	}
+
 	// If we don't have any peers whatsoever, try to dial a random bootnode. This
 	// scenario is useful for the testnet (and private networks) where the discovery
 	// table might be full of mostly bad peers, making it hard to find good ones.
