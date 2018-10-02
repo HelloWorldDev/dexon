@@ -1,6 +1,7 @@
 package dex
 
 import (
+	coreCommon "github.com/dexon-foundation/dexon-consensus-core/common"
 	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
 	"github.com/dexon-foundation/dexon-consensus-core/core/types"
 )
@@ -20,24 +21,17 @@ func (d *DexconGovernance) GetConfiguration(round uint64) *types.Config {
 }
 
 // GetCRS returns the CRS for a given round.
-func (d *DexconGovernance) GetCRS(round uint64) []byte {
-	return nil
+func (d *DexconGovernance) GetCRS(round uint64) coreCommon.Hash {
+	return coreCommon.Hash{}
+}
+
+// ProposeCRS send proposals of a new CRS
+func (d *DexconGovernance) ProposeCRS(round uint64, signedCRS []byte) {
 }
 
 // GetValidatorSet returns the current notary set.
-func (d *DexconGovernance) GetNodeSet(round uint64) map[types.NodeID]struct{} {
-	return make(map[types.NodeID]struct{})
-}
-
-// Porpose a ThresholdSignature of round.
-func (d *DexconGovernance) ProposeThresholdSignature(
-	round uint64, signature crypto.Signature) {
-}
-
-// Get a ThresholdSignature of round.
-func (d *DexconGovernance) GetThresholdSignature(round uint64) (
-	crypto.Signature, bool) {
-	return crypto.Signature{}, true
+func (d *DexconGovernance) GetNodeSet(round uint64) []crypto.PublicKey {
+	return nil
 }
 
 // AddDKGComplaint adds a DKGComplaint.

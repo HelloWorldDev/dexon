@@ -1,6 +1,9 @@
 package dex
 
-import "github.com/dexon-foundation/dexon-consensus-core/core/types"
+import (
+	"github.com/dexon-foundation/dexon-consensus-core/core/crypto"
+	"github.com/dexon-foundation/dexon-consensus-core/core/types"
+)
 
 type DexconNetwork struct {
 	receiveChan chan interface{}
@@ -20,13 +23,9 @@ func (n *DexconNetwork) BroadcastVote(vote *types.Vote) {
 func (n *DexconNetwork) BroadcastBlock(block *types.Block) {
 }
 
-// BroadcastWitnessAck broadcasts witnessAck to all nodes in DEXON network.
-func (n *DexconNetwork) BroadcastWitnessAck(witnessAck *types.WitnessAck) {
-}
-
 // SendDKGPrivateShare sends PrivateShare to a DKG participant.
 func (n *DexconNetwork) SendDKGPrivateShare(
-	recv types.NodeID, prvShare *types.DKGPrivateShare) {
+	pub crypto.PublicKey, prvShare *types.DKGPrivateShare) {
 }
 
 // BroadcastDKGPrivateShare broadcasts PrivateShare to all DKG participants.
