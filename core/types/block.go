@@ -92,6 +92,7 @@ type Header struct {
 	Randomness  []byte         `json:"randomness"         gencodec:"required"`
 	Round       uint64         `json:"round"              gencodec:"required"`
 	DexconMeta  []byte         `json:"dexconMeta"         gencodec:"required"`
+	BlockReward *big.Int       `json:"blockReward"        gencodec:"required"`
 }
 
 // field type overrides for gencodec
