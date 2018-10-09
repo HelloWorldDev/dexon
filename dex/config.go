@@ -44,6 +44,10 @@ var DefaultConfig = Config{
 		Blocks:     20,
 		Percentile: 60,
 	},
+
+	GasFloor:          8000000,
+	GasCeil:           8000000,
+	GasLimitTolerance: 1000000,
 }
 
 func init() {
@@ -83,6 +87,11 @@ type Config struct {
 	DatabaseDir        string
 	TrieCache          int
 	TrieTimeout        time.Duration
+
+	// For calculate gas limit
+	GasFloor          uint64
+	GasCeil           uint64
+	GasLimitTolerance uint64
 
 	// Dexcon options
 	Dexcon dexcon.Config
