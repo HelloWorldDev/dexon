@@ -181,7 +181,7 @@ func (st *StateTransition) preCheck() error {
 // An error indicates a consensus issue.
 func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bool, err error) {
 	if err = st.preCheck(); err != nil {
-		return nil, 0, true, nil
+		return
 	}
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
@@ -191,10 +191,10 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	// Pay intrinsic gas
 	gas, err := IntrinsicGas(st.data, contractCreation, homestead)
 	if err != nil {
-		return nil, 0, true, nil
+		return
 	}
 	if err = st.useGas(gas); err != nil {
-		return nil, 0, true, nil
+		return
 	}
 
 	var (
