@@ -14,12 +14,15 @@ import (
 
 var _ = (*genesisAccountMarshaling)(nil)
 
+// MarshalJSON marshals as JSON.
 func (g GenesisAccount) MarshalJSON() ([]byte, error) {
 	type GenesisAccount struct {
 		Code       hexutil.Bytes               `json:"code,omitempty"`
 		Storage    map[storageJSON]storageJSON `json:"storage,omitempty"`
 		Balance    *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
+		Staked     *math.HexOrDecimal256       `json:"staked" gencodec:"required"`
 		Nonce      math.HexOrDecimal64         `json:"nonce,omitempty"`
+		PublicKey  hexutil.Bytes               `json:"publicKey" gencodec:"required"`
 		PrivateKey hexutil.Bytes               `json:"secretKey,omitempty"`
 	}
 	var enc GenesisAccount
@@ -31,17 +34,22 @@ func (g GenesisAccount) MarshalJSON() ([]byte, error) {
 		}
 	}
 	enc.Balance = (*math.HexOrDecimal256)(g.Balance)
+	enc.Staked = (*math.HexOrDecimal256)(g.Staked)
 	enc.Nonce = math.HexOrDecimal64(g.Nonce)
+	enc.PublicKey = g.PublicKey
 	enc.PrivateKey = g.PrivateKey
 	return json.Marshal(&enc)
 }
 
+// UnmarshalJSON unmarshals from JSON.
 func (g *GenesisAccount) UnmarshalJSON(input []byte) error {
 	type GenesisAccount struct {
 		Code       *hexutil.Bytes              `json:"code,omitempty"`
 		Storage    map[storageJSON]storageJSON `json:"storage,omitempty"`
 		Balance    *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
+		Staked     *math.HexOrDecimal256       `json:"staked" gencodec:"required"`
 		Nonce      *math.HexOrDecimal64        `json:"nonce,omitempty"`
+		PublicKey  *hexutil.Bytes              `json:"publicKey" gencodec:"required"`
 		PrivateKey *hexutil.Bytes              `json:"secretKey,omitempty"`
 	}
 	var dec GenesisAccount
@@ -61,9 +69,17 @@ func (g *GenesisAccount) UnmarshalJSON(input []byte) error {
 		return errors.New("missing required field 'balance' for GenesisAccount")
 	}
 	g.Balance = (*big.Int)(dec.Balance)
+	if dec.Staked == nil {
+		return errors.New("missing required field 'staked' for GenesisAccount")
+	}
+	g.Staked = (*big.Int)(dec.Staked)
 	if dec.Nonce != nil {
 		g.Nonce = uint64(*dec.Nonce)
 	}
+	if dec.PublicKey == nil {
+		return errors.New("missing required field 'publicKey' for GenesisAccount")
+	}
+	g.PublicKey = *dec.PublicKey
 	if dec.PrivateKey != nil {
 		g.PrivateKey = *dec.PrivateKey
 	}
