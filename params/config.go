@@ -57,7 +57,9 @@ var (
 		EIP158Block:         big.NewInt(0),
 		ByzantiumBlock:      big.NewInt(0),
 		ConstantinopleBlock: nil,
-		Dexcon:              &DexconConfig{},
+		Dexcon: &DexconConfig{
+			BlockReward: new(big.Int).SetInt64(5e+18),
+		},
 	}
 
 	// RinkebyChainConfig contains the chain parameters to run a node on the Rinkeby test network.
@@ -157,7 +159,7 @@ type DexconConfig struct {
 	RoundInterval    uint64   `json:"roundInterval"`
 	MinBlockInterval uint64   `json:"minBlockInterval"`
 	MaxBlockInterval uint64   `json:"maxBlockInterval"`
-	MiningReward     *big.Int `json:"miningReward"`
+	BlockReward      *big.Int `json:"blockReward"`
 }
 
 // String implements the stringer interface, returning the consensus engine details.
