@@ -422,6 +422,10 @@ func (srv *Server) makeSelf(listener net.Listener, ntab discoverTable) *discover
 	return ntab.Self()
 }
 
+func (srv *Server) GetPrivateKey() *ecdsa.PrivateKey {
+	return srv.PrivateKey
+}
+
 // Stop terminates the server and all active peer connections.
 // It blocks until all active connections have been closed.
 func (srv *Server) Stop() {
