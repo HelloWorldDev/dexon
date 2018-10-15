@@ -50,13 +50,15 @@ var (
 type testP2PServer struct {
 	mu     sync.Mutex
 	self   *discover.Node
+	key    *ecdsa.PrivateKey
 	direct map[discover.NodeID]*discover.Node
 	group  map[string][]*discover.Node
 }
 
-func newTestP2PServer(self *discover.Node) *testP2PServer {
+func newTestP2PServer(self *discover.Node, key *ecdsa.PrivateKey) *testP2PServer {
 	return &testP2PServer{
 		self:   self,
+		key:    key,
 		direct: make(map[discover.NodeID]*discover.Node),
 		group:  make(map[string][]*discover.Node),
 	}
@@ -64,6 +66,10 @@ func newTestP2PServer(self *discover.Node) *testP2PServer {
 
 func (s *testP2PServer) Self() *discover.Node {
 	return s.self
+}
+
+func (s *testP2PServer) GetPrivateKey() *ecdsa.PrivateKey {
+	return s.key
 }
 
 func (s *testP2PServer) AddDirectPeer(node *discover.Node) {
@@ -115,7 +121,12 @@ func newTestProtocolManager(mode downloader.SyncMode, blocks int, generator func
 	if err != nil {
 		return nil, nil, err
 	}
-	pm.Start(newTestP2PServer(&discover.Node{}), 1000)
+
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		return nil, nil, err
+	}
+	pm.Start(newTestP2PServer(&discover.Node{}, key), 1000)
 	return pm, db, nil
 }
 

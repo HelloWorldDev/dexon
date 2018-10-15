@@ -17,6 +17,7 @@
 package dex
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"io"
 	"math/big"
@@ -133,6 +134,8 @@ type governance interface {
 
 type p2pServer interface {
 	Self() *discover.Node
+
+	GetPrivateKey() *ecdsa.PrivateKey
 
 	AddDirectPeer(*discover.Node)
 
