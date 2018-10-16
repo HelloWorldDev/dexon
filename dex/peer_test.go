@@ -41,13 +41,14 @@ func TestPeerSetBuildAndForgetNotaryConn(t *testing.T) {
 		[]discover.NodeID{nodeID(0), nodeID(2), nodeID(6)},
 	}
 
-	gov.notarySetFunc = func(cid uint32, round uint64) map[string]struct{} {
+	gov.notarySetFunc = func(
+		round uint64, cid uint32) (map[string]struct{}, error) {
 		m := map[uint64][][]discover.NodeID{
 			10: round10,
 			11: round11,
 			12: round12,
 		}
-		return newTestNodeSet(m[round][cid])
+		return newTestNodeSet(m[round][cid]), nil
 	}
 
 	ps := newPeerSet(gov, server, table)
@@ -324,13 +325,13 @@ func TestPeerSetBuildDKGConn(t *testing.T) {
 
 	gov := &testGovernance{}
 
-	gov.dkgSetFunc = func(round uint64) map[string]struct{} {
+	gov.dkgSetFunc = func(round uint64) (map[string]struct{}, error) {
 		m := map[uint64][]discover.NodeID{
 			10: []discover.NodeID{nodeID(0), nodeID(1), nodeID(2)},
 			11: []discover.NodeID{nodeID(1), nodeID(2), nodeID(5)},
 			12: []discover.NodeID{nodeID(0), nodeID(3), nodeID(5)},
 		}
-		return newTestNodeSet(m[round])
+		return newTestNodeSet(m[round]), nil
 	}
 
 	ps := newPeerSet(gov, server, table)
