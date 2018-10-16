@@ -55,11 +55,12 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
 	var (
-		receipts types.Receipts
-		usedGas  = new(uint64)
-		header   = block.Header()
-		allLogs  []*types.Log
-		gp       = new(GasPool).AddGas(block.GasLimit())
+		receipts  types.Receipts
+		usedGas   = new(uint64)
+		header    = block.Header()
+		rawHeader = block.RawHeader()
+		allLogs   []*types.Log
+		gp        = new(GasPool).AddGas(block.GasLimit())
 	)
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
@@ -76,10 +77,10 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs = append(allLogs, receipt.Logs...)
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), receipts)
+	p.engine.Finalize(p.bc, rawHeader, statedb, block.Transactions(), block.Uncles(), receipts)
 
-	block.Header().ReceiptHash = types.DeriveSha(receipts)
-	block.Header().Bloom = types.CreateBloom(receipts)
+	rawHeader.ReceiptHash = types.DeriveSha(receipts)
+	rawHeader.Bloom = types.CreateBloom(receipts)
 
 	return receipts, allLogs, *usedGas, nil
 }
