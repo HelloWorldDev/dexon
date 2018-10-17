@@ -21,7 +21,6 @@ package dex
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
 	"math/big"
 	"sort"
 	"sync"
@@ -236,8 +235,7 @@ func newTestPeer(name string, version int, pm *ProtocolManager, shake bool) (*te
 	app, net := p2p.MsgPipe()
 
 	// Generate a random id and create the peer
-	var id discover.NodeID
-	rand.Read(id[:])
+	id := randomID()
 
 	peer := pm.newPeer(version, p2p.NewPeer(id, name, nil), net)
 

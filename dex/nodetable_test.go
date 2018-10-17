@@ -1,11 +1,12 @@
 package dex
 
 import (
-	"math/rand"
+	"crypto/ecdsa"
 	"testing"
 	"time"
 
 	"github.com/dexon-foundation/dexon/common"
+	"github.com/dexon-foundation/dexon/crypto"
 	"github.com/dexon-foundation/dexon/p2p/discover"
 )
 
@@ -85,9 +86,14 @@ func TestNodeTable(t *testing.T) {
 	}
 }
 
-func randomID() (id discover.NodeID) {
-	for i := range id {
-		id[i] = byte(rand.Intn(255))
+func randomID() discover.NodeID {
+	var err error
+	var privkey *ecdsa.PrivateKey
+	for {
+		privkey, err = crypto.GenerateKey()
+		if err == nil {
+			break
+		}
 	}
-	return id
+	return discover.PubkeyID(&(privkey.PublicKey))
 }
