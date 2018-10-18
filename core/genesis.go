@@ -87,7 +87,7 @@ type GenesisAccount struct {
 	Balance    *big.Int                    `json:"balance" gencodec:"required"`
 	Staked     *big.Int                    `json:"staked" gencodec:"required"`
 	Nonce      uint64                      `json:"nonce,omitempty"`
-	PublicKey  []byte                      `json:"publicKey" gencodec:"required"`
+	PublicKey  []byte                      `json:"publicKey"`
 	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
 }
 
