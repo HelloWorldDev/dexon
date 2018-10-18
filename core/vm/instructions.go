@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -382,6 +383,21 @@ func opSha3(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory 
 	stack.push(interpreter.intPool.get().SetBytes(hash))
 
 	interpreter.intPool.put(offset, size)
+	return nil, nil
+}
+
+func opRand(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
+	evm := interpreter.evm
+
+	nonce := evm.StateDB.GetNonce(contract.Caller())
+	binaryNonce := make([]byte, binary.MaxVarintLen64)
+	binary.PutUvarint(binaryNonce, nonce)
+
+	binaryPC := make([]byte, binary.MaxVarintLen64)
+	binary.PutUvarint(binaryPC, *pc)
+
+	hash := crypto.Keccak256(contract.Caller().Bytes(), binaryNonce, binaryPC)
+	stack.push(interpreter.intPool.get().SetBytes(hash))
 	return nil, nil
 }
 
