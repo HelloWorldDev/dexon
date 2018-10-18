@@ -22,7 +22,7 @@ func (g GenesisAccount) MarshalJSON() ([]byte, error) {
 		Balance    *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
 		Staked     *math.HexOrDecimal256       `json:"staked" gencodec:"required"`
 		Nonce      math.HexOrDecimal64         `json:"nonce,omitempty"`
-		PublicKey  hexutil.Bytes               `json:"publicKey" gencodec:"required"`
+		PublicKey  hexutil.Bytes               `json:"publicKey"`
 		PrivateKey hexutil.Bytes               `json:"secretKey,omitempty"`
 	}
 	var enc GenesisAccount
@@ -49,7 +49,7 @@ func (g *GenesisAccount) UnmarshalJSON(input []byte) error {
 		Balance    *math.HexOrDecimal256       `json:"balance" gencodec:"required"`
 		Staked     *math.HexOrDecimal256       `json:"staked" gencodec:"required"`
 		Nonce      *math.HexOrDecimal64        `json:"nonce,omitempty"`
-		PublicKey  *hexutil.Bytes              `json:"publicKey" gencodec:"required"`
+		PublicKey  *hexutil.Bytes              `json:"publicKey"`
 		PrivateKey *hexutil.Bytes              `json:"secretKey,omitempty"`
 	}
 	var dec GenesisAccount
@@ -76,10 +76,9 @@ func (g *GenesisAccount) UnmarshalJSON(input []byte) error {
 	if dec.Nonce != nil {
 		g.Nonce = uint64(*dec.Nonce)
 	}
-	if dec.PublicKey == nil {
-		return errors.New("missing required field 'publicKey' for GenesisAccount")
+	if dec.PublicKey != nil {
+		g.PublicKey = *dec.PublicKey
 	}
-	g.PublicKey = *dec.PublicKey
 	if dec.PrivateKey != nil {
 		g.PrivateKey = *dec.PrivateKey
 	}
