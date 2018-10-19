@@ -164,7 +164,11 @@ func (d *DexconGovernance) NodeSet(round uint64) []coreCrypto.PublicKey {
 	var pks []coreCrypto.PublicKey
 
 	for _, n := range s.Nodes() {
-		pks = append(pks, coreEcdsa.NewPublicKeyFromByteSlice(n.PublicKey))
+		pk, err := coreEcdsa.NewPublicKeyFromByteSlice(n.PublicKey)
+		if err != nil {
+			panic(err)
+		}
+		pks = append(pks, pk)
 	}
 	return pks
 }
@@ -306,11 +310,11 @@ func (d *DexconGovernance) NotarySet(
 	r := make(map[string]struct{}, len(notarySet))
 	for id := range notarySet {
 		if key, exists := d.nodeSetCache.GetPublicKey(id); exists {
-			uncompressedKey, err := crypto.DecompressPubkey(key.Bytes())
+			pk, err := crypto.UnmarshalPubkey(key.Bytes())
 			if err != nil {
-				log.Error("decompress key fail", "err", err)
+				panic(err)
 			}
-			r[discover.PubkeyID(uncompressedKey).String()] = struct{}{}
+			r[discover.PubkeyID(pk).String()] = struct{}{}
 		}
 	}
 	return r, nil
@@ -325,11 +329,11 @@ func (d *DexconGovernance) DKGSet(round uint64) (map[string]struct{}, error) {
 	r := make(map[string]struct{}, len(dkgSet))
 	for id := range dkgSet {
 		if key, exists := d.nodeSetCache.GetPublicKey(id); exists {
-			uncompressedKey, err := crypto.DecompressPubkey(key.Bytes())
+			pk, err := crypto.UnmarshalPubkey(key.Bytes())
 			if err != nil {
-				log.Error("decompress key fail", "err", err)
+				panic(err)
 			}
-			r[discover.PubkeyID(uncompressedKey).String()] = struct{}{}
+			r[discover.PubkeyID(pk).String()] = struct{}{}
 		}
 	}
 	return r, nil
