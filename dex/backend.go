@@ -110,6 +110,8 @@ func New(ctx *node.ServiceContext, config *Config) (*Dexon, error) {
 		}
 		rawdb.WriteDatabaseVersion(chainDb, core.BlockChainVersion)
 	}
+	engine := dexcon.New()
+
 	dex := &Dexon{
 		config:         config,
 		chainDb:        chainDb,
@@ -121,7 +123,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Dexon, error) {
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 		blockdb:        db,
-		engine:         dexcon.New(chainConfig.Dexcon),
+		engine:         engine,
 	}
 
 	var (
@@ -129,6 +131,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Dexon, error) {
 		cacheConfig = &core.CacheConfig{Disabled: config.NoPruning, TrieNodeLimit: config.TrieCache, TrieTimeLimit: config.TrieTimeout}
 	)
 	dex.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, dex.chainConfig, dex.engine, vmConfig)
+
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
 		log.Warn("Rewinding chain to upgrade configuration", "err", compat)
@@ -149,8 +152,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Dexon, error) {
 	}
 	dex.APIBackend.gpo = gasprice.NewOracle(dex.APIBackend, gpoParams)
 
+	// Dexcon related objects.
 	dex.governance = NewDexconGovernance(dex.APIBackend, dex.chainConfig, config.PrivateKey)
 	dex.app = NewDexconApp(dex.txPool, dex.blockchain, dex.governance, chainDb, config, vmConfig)
+
+	// Set config fetcher so engine can fetch current system configuration from state.
+	engine.SetConfigFetcher(dex.governance)
 
 	pm, err := NewProtocolManager(dex.chainConfig, config.SyncMode,
 		config.NetworkId, dex.eventMux, dex.txPool, dex.engine, dex.blockchain,
