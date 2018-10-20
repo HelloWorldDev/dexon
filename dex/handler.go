@@ -884,12 +884,11 @@ func (pm *ProtocolManager) BroadcastRandomnessResult(
 
 func (pm *ProtocolManager) SendDKGPrivateShare(
 	pub coreCrypto.PublicKey, privateShare *coreTypes.DKGPrivateShare) {
-	uncompressedKey, err := crypto.DecompressPubkey(pub.Bytes())
+	pk, err := crypto.UnmarshalPubkey(pub.Bytes())
 	if err != nil {
-		log.Error("decompress key fail", "err", err)
+		panic(err)
 	}
-	id := discover.PubkeyID(uncompressedKey)
-	if p := pm.peers.Peer(id.String()); p != nil {
+	if p := pm.peers.Peer(discover.PubkeyID(pk).String()); p != nil {
 		p.AsyncSendDKGPrivateShare(privateShare)
 	}
 }
