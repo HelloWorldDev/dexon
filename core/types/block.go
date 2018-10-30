@@ -89,10 +89,10 @@ type Header struct {
 	Extra       []byte         `json:"extraData"          gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"            gencodec:"required"`
 	Nonce       BlockNonce     `json:"nonce"              gencodec:"required"`
+	Reward      *big.Int       `json:"reward"             gencodec:"required"`
 	Randomness  []byte         `json:"randomness"         gencodec:"required"`
 	Round       uint64         `json:"round"              gencodec:"required"`
 	DexconMeta  []byte         `json:"dexconMeta"         gencodec:"required"`
-	BlockReward *big.Int       `json:"blockReward"        gencodec:"required"`
 }
 
 // field type overrides for gencodec
@@ -103,9 +103,10 @@ type headerMarshaling struct {
 	GasUsed    hexutil.Uint64
 	Time       *hexutil.Big
 	Extra      hexutil.Bytes
-	Randomness hexutil.Bytes
 	Round      hexutil.Uint64
+	Randomness hexutil.Bytes
 	DexconMeta hexutil.Bytes
+	Reward     *hexutil.Big
 	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
 }
 
