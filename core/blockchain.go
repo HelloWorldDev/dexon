@@ -280,6 +280,9 @@ func (bc *BlockChain) AddConfirmedBlock(block *coreTypes.Block) error {
 }
 
 func (bc *BlockChain) RemoveConfirmedBlock(hash coreCommon.Hash) {
+	bc.confirmedBlocksMu.Lock()
+	defer bc.confirmedBlocksMu.Unlock()
+
 	blockInfo := bc.confirmedBlocks[hash]
 	for addr := range blockInfo.addresses {
 		bc.addressCounter[addr]--
