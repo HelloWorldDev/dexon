@@ -58,7 +58,6 @@ var (
 			DKGSetSize:       4,
 			RoundInterval:    99999999999,
 			MinBlockInterval: 900,
-			MaxBlockInterval: 1100,
 		},
 	}
 
@@ -87,7 +86,6 @@ var (
 			DKGSetSize:       4,
 			RoundInterval:    99999999999,
 			MinBlockInterval: 900,
-			MaxBlockInterval: 1100,
 		},
 	}
 
@@ -174,7 +172,6 @@ type DexconConfig struct {
 	DKGSetSize       uint32         `json:"dkgSetSize"`
 	RoundInterval    uint64         `json:"roundInterval"`
 	MinBlockInterval uint64         `json:"minBlockInterval"`
-	MaxBlockInterval uint64         `json:"maxBlockInterval"`
 }
 
 type dexconConfigSpecMarshaling struct {
@@ -183,7 +180,7 @@ type dexconConfigSpecMarshaling struct {
 
 // String implements the stringer interface, returning the consensus engine details.
 func (d *DexconConfig) String() string {
-	return fmt.Sprintf("{GenesisCRSText: %v Owner: %v BlockReward: %v BlockGasLimit: %v NumChains: %v LambdaBA: %v LambdaDKG: %v K: %v PhiRatio: %v NotarySetSize: %v DKGSetSize: %v RoundInterval: %v MinBlockInterval: %v MaxBlockInterval: %v BlockReward: %v",
+	return fmt.Sprintf("{GenesisCRSText: %v Owner: %v BlockReward: %v BlockGasLimit: %v NumChains: %v LambdaBA: %v LambdaDKG: %v K: %v PhiRatio: %v NotarySetSize: %v DKGSetSize: %v RoundInterval: %v MinBlockInterval: %v",
 		d.GenesisCRSText,
 		d.Owner,
 		d.BlockReward,
@@ -197,7 +194,6 @@ func (d *DexconConfig) String() string {
 		d.DKGSetSize,
 		d.RoundInterval,
 		d.MinBlockInterval,
-		d.MaxBlockInterval,
 	)
 }
 
