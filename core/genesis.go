@@ -251,6 +251,9 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	totalStaked := big.NewInt(0)
 
 	for addr, account := range g.Alloc {
+		if account.Staked == nil {
+			account.Staked = big.NewInt(0)
+		}
 		statedb.AddBalance(addr, new(big.Int).Sub(account.Balance, account.Staked))
 		statedb.SetCode(addr, account.Code)
 		statedb.SetNonce(addr, account.Nonce)
@@ -272,6 +275,9 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 
 	for _, addr := range keys {
 		account := g.Alloc[addr]
+		if account.Staked == nil {
+			account.Staked = big.NewInt(0)
+		}
 		if account.Staked.Cmp(big.NewInt(0)) > 0 {
 			govStateHelper.Stake(addr, account.PublicKey, account.Staked)
 		}
