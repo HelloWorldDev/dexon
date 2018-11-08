@@ -29,6 +29,7 @@ import (
 	"github.com/dexon-foundation/dexon/log"
 	"github.com/dexon-foundation/dexon/p2p/discover"
 	"github.com/dexon-foundation/dexon/p2p/discv5"
+	"github.com/dexon-foundation/dexon/p2p/enode"
 	"github.com/dexon-foundation/dexon/p2p/nat"
 	"github.com/dexon-foundation/dexon/p2p/netutil"
 )
