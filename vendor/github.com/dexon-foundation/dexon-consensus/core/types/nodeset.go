@@ -100,9 +100,6 @@ func (ns *NodeSet) Clone() *NodeSet {
 // GetSubSet returns the subset of given target.
 func (ns *NodeSet) GetSubSet(
 	size int, target SubSetTarget) map[NodeID]struct{} {
-	if size == 0 {
-		return make(map[NodeID]struct{})
-	}
 	h := rankHeap{}
 	idx := 0
 	for nID := range ns.IDs {
