@@ -1627,6 +1627,44 @@ func countTransactions(chain []*types.Block) (c int) {
 	return c
 }
 
+// GetGovStateByHash extracts the governance contract's state from state trie
+// (the merkle proof of governance contract address and the whole storage)
+// at the given block hash.
+func (bc *BlockChain) GetGovStateByHash(hash common.Hash) (*types.GovState, error) {
+	header := bc.GetHeaderByHash(hash)
+	if header == nil {
+		return nil, fmt.Errorf("header not found")
+	}
+
+	statedb, err := bc.StateAt(header.Root)
+	if err != nil {
+		return nil, err
+	}
+
+	proof, err := statedb.GetProof(vm.GovernanceContractAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	storageTrie := statedb.StorageTrie(vm.GovernanceContractAddress)
+	if storageTrie == nil {
+		panic("governance storage trie missing")
+	}
+
+	govState := &types.GovState{
+		BlockHash: header.Hash(),
+		Number:    header.Number,
+		Root:      header.Root,
+		Proof:     proof,
+	}
+
+	it := trie.NewIterator(storageTrie.NodeIterator(nil))
+	for it.Next() {
+		govState.Storage = append(govState.Storage, [2][]byte{it.Key, it.Value})
+	}
+	return govState, nil
+}
+
 // reorgs takes two blocks, an old chain and a new chain and will reconstruct the blocks and inserts them
 // to be part of the new canonical chain and accumulates potential missing transactions and post an
 // event about them
