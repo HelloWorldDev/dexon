@@ -130,7 +130,8 @@ func New(ctx *node.ServiceContext, config *Config) (*Dexon, error) {
 		vmConfig    = vm.Config{EnablePreimageRecording: config.EnablePreimageRecording}
 		cacheConfig = &core.CacheConfig{Disabled: config.NoPruning, TrieNodeLimit: config.TrieCache, TrieTimeLimit: config.TrieTimeout}
 	)
-	dex.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, dex.chainConfig, dex.engine, vmConfig, nil)
+	dex.blockchain, err = core.NewBlockChainWithDexonValidator(chainDb, cacheConfig,
+		dex.chainConfig, dex.engine, vmConfig, nil)
 
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
