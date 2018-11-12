@@ -22,7 +22,7 @@
       "phiRatio": 667000,
       "notarySetSize": 4,
       "dkgSetSize": 4,
-      "roundInterval": 600000,
+      "roundInterval": 100000,
       "minBlockInterval": 900
     }
   },

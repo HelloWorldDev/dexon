@@ -20,6 +20,7 @@
 package dex
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"math/big"
 	"net"
@@ -200,10 +201,15 @@ func newTestTransaction(from *ecdsa.PrivateKey, nonce uint64, datasize int) *typ
 
 // testGovernance is a fake, helper governance for testing purposes
 type testGovernance struct {
-	numChainsFunc func(uint64) uint32
-	lenCRSFunc    func() uint64
-	notarySetFunc func(uint64, uint32) (map[string]struct{}, error)
-	dkgSetFunc    func(uint64) (map[string]struct{}, error)
+	getRoundHeightFunc func(context.Context, uint64) (uint64, error)
+	numChainsFunc      func(uint64) uint32
+	lenCRSFunc         func() uint64
+	notarySetFunc      func(uint64, uint32) (map[string]struct{}, error)
+	dkgSetFunc         func(uint64) (map[string]struct{}, error)
+}
+
+func (g *testGovernance) GetRoundHeight(ctx context.Context, round uint64) (uint64, error) {
+	return g.getRoundHeightFunc(ctx, round)
 }
 
 func (g *testGovernance) GetNumChains(round uint64) uint32 {

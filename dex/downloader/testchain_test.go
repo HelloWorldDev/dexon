@@ -17,14 +17,16 @@
 package downloader
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"math/big"
-	"sync"
 
 	"github.com/dexon-foundation/dexon/common"
 	"github.com/dexon-foundation/dexon/consensus/ethash"
 	"github.com/dexon-foundation/dexon/core"
+	"github.com/dexon-foundation/dexon/core/state"
 	"github.com/dexon-foundation/dexon/core/types"
+	"github.com/dexon-foundation/dexon/core/vm"
 	"github.com/dexon-foundation/dexon/crypto"
 	"github.com/dexon-foundation/dexon/ethdb"
 	"github.com/dexon-foundation/dexon/params"
@@ -35,23 +37,73 @@ var (
 	testKey, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 	testAddress = crypto.PubkeyToAddress(testKey.PublicKey)
 	testDB      = ethdb.NewMemDatabase()
-	testGenesis = core.GenesisBlockForTesting(testDB, testAddress, big.NewInt(1000000000))
+	testGenesis = genesisBlockForTesting(testDB, testAddress, big.NewInt(1000000000))
+	testNodeSet = makeNodeSet()
 )
 
 // The common prefix of all test chains:
 var testChainBase = newTestChain(blockCacheItems+200, testGenesis)
 
-// Different forks on top of the base chain:
-var testChainForkLightA, testChainForkLightB, testChainForkHeavy *testChain
+func genesisBlockForTesting(db ethdb.Database,
+	addr common.Address, balance *big.Int) *types.Block {
+	var (
+		// genesis node set
+		nodekey1, _ = crypto.HexToECDSA("3cf5bdee098cc34536a7b0e80d85e07a380efca76fc12136299b9e5ba24193c8")
+		nodekey2, _ = crypto.HexToECDSA("96c9f1435d53577db18d45411326311529a0e8affb19218e27f65769a482c0fb")
+		nodekey3, _ = crypto.HexToECDSA("b25e955e30dd87cbaec83287beea6ec9c4c72498bc66905590756bf48da5d1fc")
+		nodekey4, _ = crypto.HexToECDSA("35577f65312f4a5e0b5391f5385043a6bc7b51fa4851a579e845b5fea33efded")
+		nodeaddr1   = crypto.PubkeyToAddress(nodekey1.PublicKey)
+		nodeaddr2   = crypto.PubkeyToAddress(nodekey2.PublicKey)
+		nodeaddr3   = crypto.PubkeyToAddress(nodekey3.PublicKey)
+		nodeaddr4   = crypto.PubkeyToAddress(nodekey4.PublicKey)
+	)
 
-func init() {
-	var forkLen = int(MaxForkAncestry + 50)
-	var wg sync.WaitGroup
-	wg.Add(3)
-	go func() { testChainForkLightA = testChainBase.makeFork(forkLen, false, 1); wg.Done() }()
-	go func() { testChainForkLightB = testChainBase.makeFork(forkLen, false, 2); wg.Done() }()
-	go func() { testChainForkHeavy = testChainBase.makeFork(forkLen, true, 3); wg.Done() }()
-	wg.Wait()
+	ether := big.NewInt(1e18)
+	gspec := core.Genesis{
+		Config: params.TestnetChainConfig,
+		Alloc: core.GenesisAlloc{
+			addr: {
+				Balance: balance,
+				Staked:  new(big.Int),
+			},
+			nodeaddr1: {
+				Balance:   new(big.Int).Mul(big.NewInt(1000), ether),
+				Staked:    new(big.Int).Mul(big.NewInt(500), ether),
+				PublicKey: crypto.FromECDSAPub(&nodekey1.PublicKey),
+			},
+			nodeaddr2: {
+				Balance:   new(big.Int).Mul(big.NewInt(1000), ether),
+				Staked:    new(big.Int).Mul(big.NewInt(500), ether),
+				PublicKey: crypto.FromECDSAPub(&nodekey2.PublicKey),
+			},
+			nodeaddr3: {
+				Balance:   new(big.Int).Mul(big.NewInt(1000), ether),
+				Staked:    new(big.Int).Mul(big.NewInt(500), ether),
+				PublicKey: crypto.FromECDSAPub(&nodekey3.PublicKey),
+			},
+			nodeaddr4: {
+				Balance:   new(big.Int).Mul(big.NewInt(1000), ether),
+				Staked:    new(big.Int).Mul(big.NewInt(500), ether),
+				PublicKey: crypto.FromECDSAPub(&nodekey4.PublicKey),
+			},
+		},
+	}
+	genesis := gspec.MustCommit(db)
+	return genesis
+}
+
+func makeNodeSet() *core.NodeSet {
+	var (
+		nodekey1, _ = crypto.HexToECDSA("3cf5bdee098cc34536a7b0e80d85e07a380efca76fc12136299b9e5ba24193c8")
+		nodekey2, _ = crypto.HexToECDSA("96c9f1435d53577db18d45411326311529a0e8affb19218e27f65769a482c0fb")
+		nodekey3, _ = crypto.HexToECDSA("b25e955e30dd87cbaec83287beea6ec9c4c72498bc66905590756bf48da5d1fc")
+		nodekey4, _ = crypto.HexToECDSA("35577f65312f4a5e0b5391f5385043a6bc7b51fa4851a579e845b5fea33efded")
+	)
+	crs := crypto.Keccak256Hash([]byte(params.TestnetChainConfig.Dexcon.GenesisCRSText))
+	nodeSet := core.NewNodeSet(0, crs,
+		types.NewEIP155Signer(params.TestnetChainConfig.ChainID),
+		[]*ecdsa.PrivateKey{nodekey1, nodekey2, nodekey3, nodekey4})
+	return nodeSet
 }
 
 type testChain struct {
@@ -61,6 +113,8 @@ type testChain struct {
 	blockm   map[common.Hash]*types.Block
 	receiptm map[common.Hash][]*types.Receipt
 	tdm      map[common.Hash]*big.Int
+
+	snapshotHeight map[uint64]struct{}
 }
 
 // newTestChain creates a blockchain of the given length.
@@ -71,6 +125,7 @@ func newTestChain(length int, genesis *types.Block) *testChain {
 	tc.headerm[tc.genesis.Hash()] = tc.genesis.Header()
 	tc.tdm[tc.genesis.Hash()] = tc.genesis.Difficulty()
 	tc.blockm[tc.genesis.Hash()] = tc.genesis
+	tc.snapshotHeight = make(map[uint64]struct{})
 	tc.generate(length-1, 0, genesis, false)
 	return tc
 }
@@ -118,15 +173,15 @@ func (tc *testChain) generate(n int, seed byte, parent *types.Block, heavy bool)
 	// start := time.Now()
 	// defer func() { fmt.Printf("test chain generated in %v\n", time.Since(start)) }()
 
-	blocks, receipts := core.GenerateChain(params.TestChainConfig, parent, ethash.NewFaker(), testDB, n, func(i int, block *core.BlockGen) {
-		block.SetCoinbase(common.Address{seed})
+	blocks, receipts, snapshotHeights := core.GenerateChainWithRoundChange(params.TestnetChainConfig, parent, ethash.NewFaker(), testDB, n, func(i int, block *core.BlockGen) {
+		// block.SetCoinbase(common.Address{seed})
 		// If a heavy chain is requested, delay blocks to raise difficulty
 		if heavy {
 			block.OffsetTime(-1)
 		}
 		// Include transactions to the miner to make blocks more interesting.
 		if parent == tc.genesis && i%22 == 0 {
-			signer := types.MakeSigner(params.TestChainConfig, block.Number())
+			signer := types.MakeSigner(params.TestnetChainConfig, block.Number())
 			tx, err := types.SignTx(types.NewTransaction(block.TxNonce(testAddress), common.Address{seed}, big.NewInt(1000), params.TxGas, nil, nil), signer, testKey)
 			if err != nil {
 				panic(err)
@@ -140,7 +195,7 @@ func (tc *testChain) generate(n int, seed byte, parent *types.Block, heavy bool)
 				Number:     big.NewInt(block.Number().Int64() - 1),
 			})
 		}
-	})
+	}, testNodeSet, 30)
 
 	// Convert the block-chain into a hash-chain and header/block maps
 	td := new(big.Int).Set(tc.td(parent.Hash()))
@@ -152,6 +207,10 @@ func (tc *testChain) generate(n int, seed byte, parent *types.Block, heavy bool)
 		tc.headerm[hash] = b.Header()
 		tc.receiptm[hash] = receipts[i]
 		tc.tdm[hash] = new(big.Int).Set(td)
+	}
+
+	for _, h := range snapshotHeights {
+		tc.snapshotHeight[h] = struct{}{}
 	}
 }
 
@@ -171,20 +230,35 @@ func (tc *testChain) td(hash common.Hash) *big.Int {
 }
 
 // headersByHash returns headers in ascending order from the given hash.
-func (tc *testChain) headersByHash(origin common.Hash, amount int, skip int) []*types.Header {
+func (tc *testChain) headersByHash(origin common.Hash, amount int, skip int) []*types.HeaderWithGovState {
 	num, _ := tc.hashToNumber(origin)
 	return tc.headersByNumber(num, amount, skip)
 }
 
 // headersByNumber returns headers in ascending order from the given number.
-func (tc *testChain) headersByNumber(origin uint64, amount int, skip int) []*types.Header {
-	result := make([]*types.Header, 0, amount)
+func (tc *testChain) headersByNumber(origin uint64, amount int, skip int) []*types.HeaderWithGovState {
+	result := make([]*types.HeaderWithGovState, 0, amount)
 	for num := origin; num < uint64(len(tc.chain)) && len(result) < amount; num += uint64(skip) + 1 {
 		if header, ok := tc.headerm[tc.chain[int(num)]]; ok {
-			result = append(result, header)
+			result = append(result, &types.HeaderWithGovState{Header: header})
 		}
 	}
 	return result
+}
+
+func (tc *testChain) govStateByHash(hash common.Hash) *types.GovState {
+	header := tc.headersByHash(hash, 1, 0)[0]
+	statedb, err := state.New(header.Root, state.NewDatabase(testDB))
+	if err != nil {
+		panic(err)
+	}
+
+	govState, err := state.GetGovState(statedb, header.Header,
+		vm.GovernanceContractAddress)
+	if err != nil {
+		panic(err)
+	}
+	return govState
 }
 
 // receipts returns the receipts of the given block hashes.

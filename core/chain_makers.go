@@ -249,6 +249,12 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 		time = new(big.Int).Add(parent.Time(), big.NewInt(10)) // block time is fixed at 10 seconds
 	}
 
+	var dexconMeta coreTypes.Block
+	data, err := rlp.EncodeToBytes(&dexconMeta)
+	if err != nil {
+		panic(err)
+	}
+
 	return &types.Header{
 		Root:       state.IntermediateRoot(chain.Config().IsEIP158(parent.Number())),
 		ParentHash: parent.Hash(),
@@ -259,32 +265,36 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 			Difficulty: parent.Difficulty(),
 			UncleHash:  parent.UncleHash(),
 		}),
-		GasLimit: CalcGasLimit(parent, parent.GasLimit(), parent.GasLimit()),
-		Number:   new(big.Int).Add(parent.Number(), common.Big1),
-		Time:     time,
+		GasLimit:   CalcGasLimit(parent, parent.GasLimit(), parent.GasLimit()),
+		Number:     new(big.Int).Add(parent.Number(), common.Big1),
+		Time:       time,
+		Round:      0,
+		DexconMeta: data,
 	}
 }
 
 func GenerateChainWithRoundChange(config *params.ChainConfig, parent *types.Block,
 	engine consensus.Engine, db ethdb.Database, n int, gen func(int, *BlockGen),
-	nodeSet *NodeSet, roundInterval int) ([]*types.Block, []types.Receipts) {
+	nodeSet *NodeSet, roundInterval int) ([]*types.Block, []types.Receipts, []uint64) {
 	if config == nil {
 		config = params.TestChainConfig
 	}
 
 	round := parent.Header().Round
 
+	var snapshotHeight []uint64
 	blocks, receipts := make(types.Blocks, n), make([]types.Receipts, n)
 	chainreader := &fakeChainReader{config: config}
 	genblock := func(i int, parent *types.Block, statedb *state.StateDB) (*types.Block, types.Receipts) {
 		b := &BlockGen{i: i, parent: parent, chain: blocks, statedb: statedb, config: config, engine: engine}
-		b.header = makeHeader(chainreader, parent, statedb, b.engine)
+		b.header = makeHeader2(chainreader, parent, statedb, b.engine)
 		b.header.DexconMeta = makeDexconMeta(round, parent, nodeSet)
 
 		switch i % roundInterval {
 		case 0:
 			// First block of this round, notify round height
 			tx := nodeSet.NotifyRoundHeightTx(round, b.header.Number.Uint64(), b)
+			snapshotHeight = append(snapshotHeight, b.header.Number.Uint64())
 			b.AddTx(tx)
 		case roundInterval / 2:
 			// Run DKG for next round part 1, AddMasterPublicKey
@@ -338,7 +348,34 @@ func GenerateChainWithRoundChange(config *params.ChainConfig, parent *types.Bloc
 		receipts[i] = receipt
 		parent = block
 	}
-	return blocks, receipts
+	return blocks, receipts, snapshotHeight
+}
+
+func makeHeader2(chain consensus.ChainReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
+	var time *big.Int
+	if parent.Time() == nil {
+		time = big.NewInt(10)
+	} else {
+		time = new(big.Int).Add(parent.Time(), big.NewInt(10)) // block time is fixed at 10 seconds
+	}
+
+	var dexconMeta coreTypes.Block
+	data, err := rlp.EncodeToBytes(&dexconMeta)
+	if err != nil {
+		panic(err)
+	}
+
+	return &types.Header{
+		Root:       state.IntermediateRoot(chain.Config().IsEIP158(parent.Number())),
+		ParentHash: parent.Hash(),
+		Coinbase:   parent.Coinbase(),
+		Difficulty: big.NewInt(1),
+		GasLimit:   CalcGasLimit(parent, parent.GasLimit(), parent.GasLimit()),
+		Number:     new(big.Int).Add(parent.Number(), common.Big1),
+		Time:       time,
+		Round:      0,
+		DexconMeta: data,
+	}
 }
 
 type witnessData struct {
@@ -387,7 +424,7 @@ func makeDexconMeta(round uint64, parent *types.Block, nodeSet *NodeSet) []byte 
 	coreBlock.Finalization.ParentHash = coreCommon.Hash(parentCoreBlockHash)
 	coreBlock.Finalization.Randomness = randomness
 	coreBlock.Finalization.Timestamp = time.Now().UTC()
-	coreBlock.Finalization.Height = parent.Number().Uint64()
+	coreBlock.Finalization.Height = parent.Number().Uint64() + 1
 
 	dexconMeta, err := rlp.EncodeToBytes(&coreBlock)
 	if err != nil {

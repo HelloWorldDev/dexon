@@ -95,7 +95,7 @@ var (
 			PhiRatio:         667000,
 			NotarySetSize:    4,
 			DKGSetSize:       4,
-			RoundInterval:    600000,
+			RoundInterval:    100000,
 			MinBlockInterval: 900,
 		},
 	}
