@@ -227,9 +227,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		}
 	}
 
-	// Set genesis round height mapping.
-	bc.roundHeightMap.Store(0, 0)
-
 	// Take ownership of this particular state
 	go bc.update()
 	return bc, nil
@@ -302,9 +299,6 @@ func NewBlockChainWithDexonValidator(db ethdb.Database, cacheConfig *CacheConfig
 			}
 		}
 	}
-
-	// Set genesis round height mapping.
-	bc.roundHeightMap.Store(0, 0)
 
 	// Take ownership of this particular state
 	go bc.update()
@@ -1586,9 +1580,8 @@ func (bc *BlockChain) processPendingBlock(block *types.Block, witness *coreTypes
 		cache, _ := bc.stateCache.TrieDB().Size()
 		stats.report([]*types.Block{pendingIns.block}, 0, cache)
 
-		_, ok := bc.roundHeightMap.Load(pendingIns.block.Round())
-		if !ok {
-			bc.roundHeightMap.Store(pendingIns.block.Round(), pendingHeight)
+		if _, ok := bc.GetRoundHeight(pendingIns.block.Round()); !ok {
+			bc.storeRoundHeight(pendingIns.block.Round(), pendingHeight)
 		}
 	}
 	// Append a single chain head event if we've progressed the chain
@@ -2042,4 +2035,8 @@ func (bc *BlockChain) GetRoundHeight(round uint64) (uint64, bool) {
 		return 0, false
 	}
 	return h.(uint64), true
+}
+
+func (bc *BlockChain) storeRoundHeight(round uint64, height uint64) {
+	bc.roundHeightMap.Store(round, height)
 }
