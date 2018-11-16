@@ -1344,6 +1344,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 
 			blockInsertTimer.UpdateSince(bstart)
 			events = append(events, ChainSideEvent{block})
+			panic("fork found")
 		}
 		stats.processed++
 		stats.usedGas += usedGas
