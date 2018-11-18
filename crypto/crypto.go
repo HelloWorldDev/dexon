@@ -28,6 +28,8 @@ import (
 	"math/big"
 	"os"
 
+	"golang.org/x/crypto/blake2b"
+
 	"github.com/dexon-foundation/dexon/common"
 	"github.com/dexon-foundation/dexon/common/math"
 	"github.com/dexon-foundation/dexon/crypto/sha3"
@@ -43,7 +45,7 @@ var errInvalidPubkey = errors.New("invalid secp256k1 public key")
 
 // Keccak256 calculates and returns the Keccak256 hash of the input data.
 func Keccak256(data ...[]byte) []byte {
-	d := sha3.NewKeccak256()
+	d, _ := blake2b.New256(nil)
 	for _, b := range data {
 		d.Write(b)
 	}
@@ -53,7 +55,7 @@ func Keccak256(data ...[]byte) []byte {
 // Keccak256Hash calculates and returns the Keccak256 hash of the input data,
 // converting it to an internal Hash data structure.
 func Keccak256Hash(data ...[]byte) (h common.Hash) {
-	d := sha3.NewKeccak256()
+	d, _ := blake2b.New256(nil)
 	for _, b := range data {
 		d.Write(b)
 	}
