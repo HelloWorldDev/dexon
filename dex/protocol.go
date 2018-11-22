@@ -60,7 +60,7 @@ var ProtocolName = "dex"
 var ProtocolVersions = []uint{dex64}
 
 // ProtocolLengths are the number of implemented message corresponding to different protocol versions.
-var ProtocolLengths = []uint64{40}
+var ProtocolLengths = []uint64{42}
 
 const ProtocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
@@ -93,6 +93,9 @@ const (
 	DKGPartialSignatureMsg = 0x25
 	PullBlocksMsg          = 0x26
 	PullVotesMsg           = 0x27
+
+	GetGovStateMsg = 0x28
+	GovStateMsg    = 0x29
 )
 
 type errCode int
@@ -140,6 +143,8 @@ type txPool interface {
 }
 
 type governance interface {
+	GetRoundHeight(uint64) uint64
+
 	GetNumChains(uint64) uint32
 
 	LenCRS() uint64
@@ -184,6 +189,8 @@ type getBlockHeadersData struct {
 	Amount  uint64       // Maximum number of headers to retrieve
 	Skip    uint64       // Blocks to skip between consecutive headers
 	Reverse bool         // Query direction (false = rising towards latest, true = falling towards genesis)
+
+	WithGov bool
 }
 
 // hashOrNumber is a combined field for specifying an origin block.
