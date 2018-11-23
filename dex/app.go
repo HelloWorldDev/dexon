@@ -429,6 +429,8 @@ func (d *DexconApp) BlockDelivered(
 	}
 
 	block.Payload = nil
+	block.Finalization = result
+
 	dexconMeta, err := rlp.EncodeToBytes(block)
 	if err != nil {
 		panic(err)

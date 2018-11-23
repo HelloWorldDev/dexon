@@ -210,7 +210,7 @@ func NewProtocolManager(
 		return nil, errIncompatibleConfig
 	}
 	// Construct the different synchronisation mechanisms
-	manager.downloader = downloader.New(mode, chaindb, manager.eventMux, blockchain, nil, manager.removePeer)
+	manager.downloader = downloader.New(mode, chaindb, manager.eventMux, blockchain, nil, manager.removePeer, manager.receiveCh)
 
 	validator := func(header *types.Header) error {
 		return engine.VerifyHeader(blockchain, header, true)
@@ -703,10 +703,6 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	case msg.Code == NewBlockHashesMsg:
-		// Ignore new block hash messages in block proposer mode.
-		if pm.isBlockProposer {
-			break
-		}
 		var announces newBlockHashesData
 		if err := msg.Decode(&announces); err != nil {
 			return errResp(ErrDecode, "%v: %v", msg, err)
@@ -723,14 +719,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 		for _, block := range unknown {
+			log.Debug("#debug1 #got unknown new block hashes", "number", block.Number, "hash", block.Hash.String())
 			pm.fetcher.Notify(p.id, block.Hash, block.Number, time.Now(), p.RequestOneHeader, p.RequestBodies)
 		}
 
 	case msg.Code == NewBlockMsg:
-		// Ignore new block messages in block proposer mode.
-		if pm.isBlockProposer {
-			break
-		}
 		// Retrieve and decode the propagated block
 		var request newBlockData
 		if err := msg.Decode(&request); err != nil {
@@ -750,14 +743,18 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			trueTD   = new(big.Int).Sub(request.TD, request.Block.Difficulty())
 		)
 		// Update the peers total difficulty if better than the previous
+		log.Debug("#debug1 got unknown new block", "number", request.Block.NumberU64(), "hash", request.Block.Hash().String())
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
+			log.Debug("#debug1 got unknown set head", "number", request.Block.NumberU64(), "hash", request.Block.Hash().String())
 			p.SetHead(trueHead, trueTD)
 
 			// Schedule a sync if above ours. Note, this will not fire a sync for a gap of
 			// a singe block (as the true TD is below the propagated block), however this
 			// scenario should easily be covered by the fetcher.
 			currentBlock := pm.blockchain.CurrentBlock()
+			log.Debug("#debug1 current block", "number", currentBlock.NumberU64(), "hash", currentBlock.Hash().String())
 			if trueTD.Cmp(pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())) > 0 {
+				log.Debug("#debug1 synchronise", "number", request.Block.NumberU64(), "hash", request.Block.Hash().String())
 				go pm.synchronise(p)
 			}
 		}

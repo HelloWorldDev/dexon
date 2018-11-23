@@ -25,6 +25,7 @@ import (
 	"time"
 
 	dexCore "github.com/dexon-foundation/dexon-consensus/core"
+	coreTypes "github.com/dexon-foundation/dexon-consensus/core/types"
 
 	ethereum "github.com/dexon-foundation/dexon"
 	"github.com/dexon-foundation/dexon/common"
@@ -38,6 +39,7 @@ import (
 	"github.com/dexon-foundation/dexon/log"
 	"github.com/dexon-foundation/dexon/metrics"
 	"github.com/dexon-foundation/dexon/params"
+	"github.com/dexon-foundation/dexon/rlp"
 	"github.com/dexon-foundation/dexon/trie"
 )
 
@@ -124,6 +126,9 @@ type Downloader struct {
 
 	// Callbacks
 	dropPeer peerDropFn // Drops a peer for misbehaving
+
+	// For sending finalized block to consensus core
+	receiveCh chan<- interface{}
 
 	// Status
 	synchroniseMock func(id string, hash common.Hash) error // Replacement for synchronise during testing
@@ -214,7 +219,7 @@ type BlockChain interface {
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
-func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn) *Downloader {
+func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, receiveCh chan<- interface{}) *Downloader {
 	if lightchain == nil {
 		lightchain = chain
 	}
@@ -230,6 +235,7 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockC
 		blockchain:     chain,
 		lightchain:     lightchain,
 		dropPeer:       dropPeer,
+		receiveCh:      receiveCh,
 		headerCh:       make(chan dataPack, 1),
 		govStateCh:     make(chan dataPack, 1),
 		bodyCh:         make(chan dataPack, 1),
@@ -1515,8 +1521,10 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 	}
 	if index, err := d.blockchain.InsertDexonChain(blocks); err != nil {
 		log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
+		d.passRandomness(blocks[:index])
 		return errInvalidChain
 	}
+	d.passRandomness(blocks)
 	return nil
 }
 
@@ -1658,8 +1666,11 @@ func (d *Downloader) commitFastSyncData(results []*fetchResult, stateSync *state
 	}
 	if index, err := d.blockchain.InsertReceiptChain(blocks, receipts); err != nil {
 		log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
+		d.passRandomness(blocks[:index])
 		return errInvalidChain
 	}
+	d.passRandomness(blocks)
+
 	return nil
 }
 
@@ -1669,11 +1680,29 @@ func (d *Downloader) commitPivotBlock(result *fetchResult) error {
 	if _, err := d.blockchain.InsertReceiptChain([]*types.Block{block}, []types.Receipts{result.Receipts}); err != nil {
 		return err
 	}
+	d.passRandomness([]*types.Block{block})
 	if err := d.blockchain.FastSyncCommitHead(block.Hash()); err != nil {
 		return err
 	}
 	atomic.StoreInt32(&d.committed, 1)
 	return nil
+}
+
+func (d *Downloader) passRandomness(blocks []*types.Block) {
+	for _, block := range blocks {
+		var dexconMeta coreTypes.Block
+		if err := rlp.DecodeBytes(block.Header().DexconMeta, &dexconMeta); err != nil {
+			// catch error when developing
+			panic(err)
+		}
+		randomness := coreTypes.BlockRandomnessResult{
+			BlockHash:  dexconMeta.Hash,
+			Position:   dexconMeta.Position,
+			Randomness: dexconMeta.Finalization.Randomness,
+		}
+		log.Debug("Passing cc randomness", "number", block.NumberU64())
+		d.receiveCh <- &randomness
+	}
 }
 
 // DeliverHeaders injects a new batch of block headers received from a remote
