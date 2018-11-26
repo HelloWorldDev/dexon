@@ -71,9 +71,38 @@ var (
 		BloomRoot:    common.HexToHash("0x47f30069473072e00d2cdca146dce40f0aad243dfc8221bf810822c091674efe"),
 	}
 
-	// TestnetChainConfig contains the chain parameters to run a node on the Ropsten test network.
+	// TestnetChainConfig contains the chain parameters to run a node on the Taiwan test network.
 	TestnetChainConfig = &ChainConfig{
 		ChainID:             big.NewInt(238),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      true,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: nil,
+		Dexcon: &DexconConfig{
+			GenesisCRSText:   "In DEXON, we trust.",
+			Owner:            common.HexToAddress("BF8C48A620bacc46907f9B89732D25E47A2D7Cf7"),
+			MinStake:         new(big.Int).Mul(big.NewInt(1e18), big.NewInt(1e5)),
+			BlockReward:      big.NewInt(1e18),
+			BlockGasLimit:    40000000,
+			NumChains:        6,
+			LambdaBA:         250,
+			LambdaDKG:        2500,
+			K:                0,
+			PhiRatio:         0.667,
+			NotarySetSize:    4,
+			DKGSetSize:       4,
+			RoundInterval:    600000,
+			MinBlockInterval: 900,
+		},
+	}
+
+	// TaipeiChainConfig contains the chain parameters to run a node on the Taipei test network.
+	TaipeiChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(239),
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      true,
