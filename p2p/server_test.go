@@ -217,19 +217,20 @@ func TestServerPeerConnFlag(t *testing.T) {
 	defer srv.Stop()
 
 	// inject a peer
-	id := uintID(1)
+	key := newkey()
+	id := enode.PubkeyToIDV4(&key.PublicKey)
+	node := newNode(id, nil)
 	fd, _ := net.Pipe()
 	c := &conn{
-		id:        id,
+		node:      node,
 		fd:        fd,
-		transport: newTestTransport(id, fd),
+		transport: newTestTransport(&key.PublicKey, fd),
 		flags:     inboundConn,
 		cont:      make(chan error),
 	}
 	if err := srv.checkpoint(c, srv.addpeer); err != nil {
 		t.Fatalf("could not add conn: %v", err)
 	}
-	node := &enode.Node{ID: id}
 
 	srv.AddTrustedPeer(node)
 	srv.Peers() // leverage this function to ensure trusted peer is added

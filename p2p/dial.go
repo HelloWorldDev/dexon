@@ -70,12 +70,12 @@ type dialGroup struct {
 	num   uint64
 }
 
-// dialstate schedules dials and enodey lookups.
+// dialstate schedules dials and discovery lookups.
 // it get's a chance to compute new tasks on every iteration
 // of the main loop in Server.run.
 type dialstate struct {
 	maxDynDials int
-	ntab        enodeTable
+	ntab        discoverTable
 	netrestrict *netutil.Netlist
 
 	lookupRunning bool
@@ -91,7 +91,7 @@ type dialstate struct {
 	bootnodes []*enode.Node // default dials when there are no peers
 }
 
-type enodeTable interface {
+type discoverTable interface {
 	Self() *enode.Node
 	Close()
 	Resolve(*enode.Node) *enode.Node
@@ -121,10 +121,10 @@ type dialTask struct {
 	resolveDelay time.Duration
 }
 
-// enodeTask runs discovery table operations.
-// Only one enodeTask is active at any time.
-// enodeTask.Do performs a random lookup.
-type enodeTask struct {
+// discoverTask runs discovery table operations.
+// Only one discoverTask is active at any time.
+// discoverTask.Do performs a random lookup.
+type discoverTask struct {
 	results []*enode.Node
 }
 
@@ -134,7 +134,7 @@ type waitExpireTask struct {
 	time.Duration
 }
 
-func newDialState(static []*enode.Node, bootnodes []*enode.Node, ntab enodeTable, maxdyn int, netrestrict *netutil.Netlist) *dialstate {
+func newDialState(static []*enode.Node, bootnodes []*enode.Node, ntab discoverTable, maxdyn int, netrestrict *netutil.Netlist) *dialstate {
 	s := &dialstate{
 		maxDynDials: maxdyn,
 		ntab:        ntab,
@@ -286,7 +286,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[enode.ID]*Peer, now time.Ti
 	}
 
 	// If we don't have any peers whatsoever, try to dial a random bootnode. This
-	// scenario is useful for the testnet (and private networks) where the enodey
+	// scenario is useful for the testnet (and private networks) where the discovery
 	// table might be full of mostly bad peers, making it hard to find good ones.
 	if len(peers) == 0 && len(s.bootnodes) > 0 && needDynDials > 0 && now.Sub(s.start) > fallbackInterval {
 		bootnode := s.bootnodes[0]
@@ -317,10 +317,10 @@ func (s *dialstate) newTasks(nRunning int, peers map[enode.ID]*Peer, now time.Ti
 		}
 	}
 	s.lookupBuf = s.lookupBuf[:copy(s.lookupBuf, s.lookupBuf[i:])]
-	// Launch a enodey lookup if more candidates are needed.
+	// Launch a discovery lookup if more candidates are needed.
 	if len(s.lookupBuf) < needDynDials && !s.lookupRunning {
 		s.lookupRunning = true
-		newtasks = append(newtasks, &enodeTask{})
+		newtasks = append(newtasks, &discoverTask{})
 	}
 
 	// Launch a timer to wait for the next node to expire if all
@@ -364,7 +364,7 @@ func (s *dialstate) taskDone(t task, now time.Time) {
 	case *dialTask:
 		s.hist.add(t.dest.ID(), now.Add(dialHistoryExpiration))
 		delete(s.dialing, t.dest.ID())
-	case *enodeTask:
+	case *discoverTask:
 		s.lookupRunning = false
 		s.lookupBuf = append(s.lookupBuf, t.results...)
 	}
@@ -389,14 +389,14 @@ func (t *dialTask) Do(srv *Server) {
 }
 
 // resolve attempts to find the current endpoint for the destination
-// using enodey.
+// using discovery.
 //
 // Resolve operations are throttled with backoff to avoid flooding the
-// enodey network with useless queries for nodes that don't exist.
+// discovery network with useless queries for nodes that don't exist.
 // The backoff delay resets when the node is found.
 func (t *dialTask) resolve(srv *Server) bool {
 	if srv.ntab == nil {
-		log.Debug("Can't resolve node", "id", t.dest.ID, "err", "enodey is disabled")
+		log.Debug("Can't resolve node", "id", t.dest.ID, "err", "discovery is disabled")
 		return false
 	}
 	if t.resolveDelay == 0 {
@@ -441,7 +441,7 @@ func (t *dialTask) String() string {
 	return fmt.Sprintf("%v %x %v:%d", t.flags, id[:8], t.dest.IP(), t.dest.TCP())
 }
 
-func (t *enodeTask) Do(srv *Server) {
+func (t *discoverTask) Do(srv *Server) {
 	// newTasks generates a lookup task whenever dynamic dials are
 	// necessary. Lookups need to take some time, otherwise the
 	// event loop spins too fast.
@@ -453,8 +453,8 @@ func (t *enodeTask) Do(srv *Server) {
 	t.results = srv.ntab.LookupRandom()
 }
 
-func (t *enodeTask) String() string {
-	s := "enodey lookup"
+func (t *discoverTask) String() string {
+	s := "discovery lookup"
 	if len(t.results) > 0 {
 		s += fmt.Sprintf(" (%d results)", len(t.results))
 	}

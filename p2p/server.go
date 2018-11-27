@@ -160,7 +160,7 @@ type Server struct {
 	lock    sync.Mutex // protects running
 	running bool
 
-	ntab         enodeTable
+	ntab         discoverTable
 	listener     net.Listener
 	ourHandshake *protoHandshake
 	lastLookup   time.Time
@@ -406,7 +406,7 @@ func (srv *Server) Self() *enode.Node {
 	return srv.makeSelf(listener, ntab)
 }
 
-func (srv *Server) makeSelf(listener net.Listener, ntab enodeTable) *enode.Node {
+func (srv *Server) makeSelf(listener net.Listener, ntab discoverTable) *enode.Node {
 	// If the node is running but enodey is off, manually assemble the node infos.
 	if ntab == nil {
 		addr := srv.tcpAddr(listener)
