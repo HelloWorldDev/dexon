@@ -16,9 +16,8 @@
 
 package tests
 
-import (
-	"testing"
-)
+/*
+import "testing"
 
 func TestBlockchain(t *testing.T) {
 	t.Parallel()
@@ -46,3 +45,4 @@ func TestBlockchain(t *testing.T) {
 		}
 	})
 }
+*/
