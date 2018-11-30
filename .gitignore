@@ -54,3 +54,5 @@ profile.cov
 # test
 test/Dexon.*
 test/*.log
+dexon-dev
+dev
