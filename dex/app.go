@@ -30,6 +30,7 @@ import (
 	"github.com/dexon-foundation/dexon/core"
 	"github.com/dexon-foundation/dexon/core/types"
 	"github.com/dexon-foundation/dexon/ethdb"
+	"github.com/dexon-foundation/dexon/event"
 	"github.com/dexon-foundation/dexon/log"
 	"github.com/dexon-foundation/dexon/rlp"
 )
@@ -45,6 +46,9 @@ type DexconApp struct {
 	gov        *DexconGovernance
 	chainDB    ethdb.Database
 	config     *Config
+
+	finalizedBlockFeed event.Feed
+	scope              event.SubscriptionScope
 
 	chainLocksInitMu sync.Mutex
 	chainLocks       map[uint32]*sync.RWMutex
@@ -455,6 +459,7 @@ func (d *DexconApp) BlockDelivered(
 		Randomness: result.Randomness,
 	}, txs, nil, nil)
 
+	h := d.blockchain.CurrentBlock().NumberU64() + 1
 	root, err := d.blockchain.ProcessPendingBlock(newBlock, &block.Witness)
 	if err != nil {
 		log.Error("Failed to process pending block", "error", err)
@@ -463,6 +468,15 @@ func (d *DexconApp) BlockDelivered(
 	d.chainLatestRoot.Store(block.Position.ChainID, root)
 
 	d.blockchain.RemoveConfirmedBlock(chainID, blockHash)
+
+	// New blocks are final, notify other components.
+	newHeight := d.blockchain.CurrentBlock().NumberU64()
+	for h <= newHeight {
+		b := d.blockchain.GetBlockByNumber(h)
+		go d.finalizedBlockFeed.Send(core.NewFinalizedBlockEvent{b})
+		log.Debug("Send new finalized block event", "number", h)
+		h++
+	}
 }
 
 // BlockConfirmed is called when a block is confirmed and added to lattice.
@@ -473,4 +487,13 @@ func (d *DexconApp) BlockConfirmed(block coreTypes.Block) {
 	if err := d.blockchain.AddConfirmedBlock(&block); err != nil {
 		panic(err)
 	}
+}
+
+func (d *DexconApp) SubscribeNewFinalizedBlockEvent(
+	ch chan<- core.NewFinalizedBlockEvent) event.Subscription {
+	return d.scope.Track(d.finalizedBlockFeed.Subscribe(ch))
+}
+
+func (d *DexconApp) Stop() {
+	d.scope.Close()
 }
