@@ -155,7 +155,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Dexon, error) {
 
 	pm, err := NewProtocolManager(dex.chainConfig, config.SyncMode,
 		config.NetworkId, dex.eventMux, dex.txPool, dex.engine, dex.blockchain,
-		chainDb, config.BlockProposerEnabled, dex.governance)
+		chainDb, config.BlockProposerEnabled, dex.governance, dex.app)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +243,7 @@ func (s *Dexon) Start(srvr *p2p.Server) error {
 }
 
 func (s *Dexon) Stop() error {
+	s.app.Stop()
 	return nil
 }
 
