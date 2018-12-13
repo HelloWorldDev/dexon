@@ -962,6 +962,19 @@ func init() {
 	}
 }
 
+// PurgeGovernanceContract purges governance to initial state but preserves
+// staking info.
+func PurgeGovernanceContract(state StateDB) (err error) {
+	gov := GovernanceStateHelper{state}
+	gov.resetCRS()
+	gov.resetDKGMasterPublicKey()
+	gov.resetDKGComplaint()
+	gov.resetDKGFinalized()
+	gov.resetRoundHeight()
+	gov.resetConfiguration()
+	return
+}
+
 // RunGovernanceContract executes governance contract.
 func RunGovernanceContract(evm *EVM, input []byte, contract *Contract) (ret []byte, err error) {
 	if len(input) < 4 {
@@ -1365,6 +1378,7 @@ const (
 	dkgSetSizeLoc
 	roundIntervalLoc
 	minBlockIntervalLoc
+	dkgFinalizedVersionLoc
 )
 
 // State manipulation helper fro the governance contract.
@@ -1505,6 +1519,24 @@ func (s *GovernanceStateHelper) appendTo2DByteArray(pos, index *big.Int, data []
 	elementLoc := new(big.Int).Add(dataLoc, arrayLength)
 	s.writeBytes(elementLoc, data)
 }
+func (s *GovernanceStateHelper) reset2DByteArray(pos *big.Int) {
+	baseLoc := s.getSlotLoc(pos)
+	zero := big.NewInt(0)
+	for i := int64(0); ; i++ {
+		// Find the loc of given index.
+		index := big.NewInt(i)
+		loc := new(big.Int).Add(baseLoc, index)
+
+		// Get the length.
+		len := s.getStateBigInt(loc)
+		if len.Cmp(zero) == 0 {
+			break
+		}
+
+		// Reset length to zero.
+		s.setStateBigInt(loc, zero)
+	}
+}
 
 // uint256[] public roundHeight;
 func (s *GovernanceStateHelper) LenRoundHeight() *big.Int {
@@ -1524,6 +1556,15 @@ func (s *GovernanceStateHelper) PushRoundHeight(height *big.Int) {
 	loc := new(big.Int).Add(baseLoc, length)
 
 	s.setStateBigInt(loc, height)
+}
+func (s *GovernanceStateHelper) resetRoundHeight() {
+	baseLoc := s.getSlotLoc(big.NewInt(roundHeightLoc))
+
+	for i := big.NewInt(0); i.Cmp(s.LenRoundHeight()) < 0; i.Add(i, big.NewInt(1)) {
+		loc := new(big.Int).Add(baseLoc, i)
+		s.setStateBigInt(loc, big.NewInt(0))
+	}
+	s.setStateBigInt(big.NewInt(roundHeightLoc), big.NewInt(1))
 }
 
 // struct Node {
@@ -1814,6 +1855,18 @@ func (s *GovernanceStateHelper) PushCRS(crs common.Hash) {
 func (s *GovernanceStateHelper) Round() *big.Int {
 	return new(big.Int).Sub(s.getStateBigInt(big.NewInt(crsLoc)), big.NewInt(1))
 }
+func (s *GovernanceStateHelper) resetCRS() {
+	crs := s.CurrentCRS()
+
+	baseLoc := s.getSlotLoc(big.NewInt(crsLoc))
+
+	for i := big.NewInt(0); i.Cmp(s.LenCRS()) < 0; i.Add(i, big.NewInt(1)) {
+		loc := new(big.Int).Add(baseLoc, i)
+		s.setState(common.BigToHash(loc), common.Hash{})
+	}
+	s.setStateBigInt(big.NewInt(crsLoc), big.NewInt(0))
+	s.PushCRS(crs)
+}
 
 // bytes[][] public dkgMasterPublicKeys;
 func (s *GovernanceStateHelper) DKGMasterPublicKeys(round *big.Int) [][]byte {
@@ -1841,6 +1894,9 @@ func (s *GovernanceStateHelper) UniqueDKGMasterPublicKeys(round *big.Int) []*dkg
 	}
 	return dkgMasterPKs
 }
+func (s *GovernanceStateHelper) resetDKGMasterPublicKey() {
+	s.reset2DByteArray(big.NewInt(dkgMasterPublicKeysLoc))
+}
 
 // bytes[][] public dkgComplaints;
 func (s *GovernanceStateHelper) DKGComplaints(round *big.Int) [][]byte {
@@ -1848,6 +1904,9 @@ func (s *GovernanceStateHelper) DKGComplaints(round *big.Int) [][]byte {
 }
 func (s *GovernanceStateHelper) PushDKGComplaint(round *big.Int, complaint []byte) {
 	s.appendTo2DByteArray(big.NewInt(dkgComplaintsLoc), round, complaint)
+}
+func (s *GovernanceStateHelper) resetDKGComplaint() {
+	s.reset2DByteArray(big.NewInt(dkgComplaintsLoc))
 }
 
 // mapping(address => bool)[] public dkgReady;
@@ -1877,20 +1936,35 @@ func (s *GovernanceStateHelper) IncDKGMPKReadysCount(round *big.Int) {
 	s.setStateBigInt(loc, new(big.Int).Add(count, big.NewInt(1)))
 }
 
-// mapping(address => bool)[] public dkgFinalized;
+// mapping(address => mapping(version => bool))[] public dkgFinalized;
 func (s *GovernanceStateHelper) DKGFinalized(round *big.Int, addr common.Address) bool {
 	baseLoc := new(big.Int).Add(s.getSlotLoc(big.NewInt(dkgFinalizedLoc)), round)
-	mapLoc := s.getMapLoc(baseLoc, addr.Bytes())
+	versionLoc := s.getMapLoc(baseLoc, s.dkgFinalizedVersion().Bytes())
+	mapLoc := s.getMapLoc(versionLoc, addr.Bytes())
 	return s.getStateBigInt(mapLoc).Cmp(big.NewInt(0)) != 0
 }
 func (s *GovernanceStateHelper) PutDKGFinalized(round *big.Int, addr common.Address, finalized bool) {
 	baseLoc := new(big.Int).Add(s.getSlotLoc(big.NewInt(dkgFinalizedLoc)), round)
-	mapLoc := s.getMapLoc(baseLoc, addr.Bytes())
+	versionLoc := s.getMapLoc(baseLoc, s.dkgFinalizedVersion().Bytes())
+	mapLoc := s.getMapLoc(versionLoc, addr.Bytes())
 	res := big.NewInt(0)
 	if finalized {
 		res = big.NewInt(1)
 	}
 	s.setStateBigInt(mapLoc, res)
+}
+func (s *GovernanceStateHelper) resetDKGFinalized() {
+	s.incFinalizedVersion()
+	s.resetDKGFinalizedsCount()
+}
+
+// uint256 private dkgFinalizedVersion;
+func (s *GovernanceStateHelper) dkgFinalizedVersion() *big.Int {
+	return s.getStateBigInt(big.NewInt(dkgFinalizedVersionLoc))
+}
+func (s *GovernanceStateHelper) incFinalizedVersion() {
+	count := s.getStateBigInt(big.NewInt(dkgFinalizedVersionLoc))
+	s.setStateBigInt(big.NewInt(dkgFinalizedVersionLoc), new(big.Int).Add(count, big.NewInt(1)))
 }
 
 // uint256[] public dkgFinalizedsCount;
@@ -1902,6 +1976,18 @@ func (s *GovernanceStateHelper) IncDKGFinalizedsCount(round *big.Int) {
 	loc := new(big.Int).Add(s.getSlotLoc(big.NewInt(dkgFinalizedsCountLoc)), round)
 	count := s.getStateBigInt(loc)
 	s.setStateBigInt(loc, new(big.Int).Add(count, big.NewInt(1)))
+}
+func (s *GovernanceStateHelper) resetDKGFinalizedsCount() {
+	zero := big.NewInt(0)
+	for i := int64(0); ; i++ {
+		round := big.NewInt(i)
+		loc := new(big.Int).Add(s.getSlotLoc(big.NewInt(dkgFinalizedsCountLoc)), round)
+		count := s.getStateBigInt(loc)
+		if count.Cmp(zero) == 0 {
+			break
+		}
+		s.setStateBigInt(loc, big.NewInt(0))
+	}
 }
 
 // address public owner;
@@ -2068,6 +2154,10 @@ func (s *GovernanceStateHelper) UpdateConfigurationRaw(cfg *rawConfigStruct) {
 	s.setStateBigInt(big.NewInt(dkgSetSizeLoc), cfg.DKGSetSize)
 	s.setStateBigInt(big.NewInt(roundIntervalLoc), cfg.RoundInterval)
 	s.setStateBigInt(big.NewInt(minBlockIntervalLoc), cfg.MinBlockInterval)
+}
+
+func (s *GovernanceStateHelper) resetConfiguration() {
+	// TODO(jimmy): finish this.
 }
 
 // event ConfigurationChanged();

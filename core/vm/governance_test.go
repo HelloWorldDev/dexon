@@ -38,7 +38,12 @@ func init() {
 }
 
 func randomBytes(minLength, maxLength int32) []byte {
-	length := rand.Int31()%(maxLength-minLength) + minLength
+	var length int32
+	if minLength == maxLength {
+		length = minLength
+	} else {
+		length = rand.Int31()%(maxLength-minLength) + minLength
+	}
 	b := make([]byte, length)
 	for i := range b {
 		b[i] = byte(65 + rand.Int31()%60)
@@ -797,6 +802,78 @@ func (g *GovernanceContractTestSuite) TestMiscVariableReading() {
 	err = abiObject.Unpack(&value, "delegatorsOffset", res)
 	g.Require().NoError(err)
 	g.Require().Equal(2, int(value.Uint64()))
+}
+
+func (g *GovernanceContractTestSuite) TestPurgeGovernance() {
+	repeat := 5
+	for r := 0; r < repeat; r++ {
+		round := 10
+		for i := 0; i < round; i++ {
+			// Prepare CRS.
+			crs := common.BytesToHash(randomBytes(common.HashLength, common.HashLength))
+			g.s.PushCRS(crs)
+			// Prepare Round Height
+			if i != 0 {
+				g.s.PushRoundHeight(big.NewInt(int64(i) * 10))
+			}
+		}
+		crs := common.BytesToHash(randomBytes(common.HashLength, common.HashLength))
+		g.s.PushCRS(crs)
+		g.Require().Equal(0, g.s.LenCRS().Cmp(big.NewInt(int64(round+2))))
+		g.Require().Equal(crs, g.s.CurrentCRS())
+		g.Require().Equal(0, g.s.LenRoundHeight().Cmp(big.NewInt(int64(round))))
+
+		addrs := make(map[int][]common.Address)
+		for i := 0; i < round; i++ {
+			r := big.NewInt(int64(i))
+			for j := 0; j < 5; j++ {
+				// Prepare MPK.
+				g.s.PushDKGMasterPublicKey(r, randomBytes(32, 64))
+				// Prepare Complaint.
+				g.s.PushDKGComplaint(r, randomBytes(32, 64))
+				// Prepare Finalized.
+				addr := common.BytesToAddress(
+					randomBytes(common.AddressLength, common.AddressLength))
+				addrs[i] = append(addrs[i], addr)
+				g.s.PutDKGFinalized(r, addr, true)
+				g.s.IncDKGFinalizedsCount(r)
+			}
+			g.Require().Len(g.s.DKGMasterPublicKeys(r), 5)
+			g.Require().Len(g.s.DKGComplaints(r), 5)
+			g.Require().Equal(0, g.s.DKGFinalizedsCount(r).Cmp(big.NewInt(5)))
+			for _, addr := range addrs[i] {
+				g.Require().True(g.s.DKGFinalized(r, addr))
+			}
+		}
+
+		PurgeGovernanceContract(g.s.StateDB)
+
+		// Test if CRS is purged.
+		g.Require().Equal(0, g.s.LenCRS().Cmp(big.NewInt(1)))
+		g.Require().Equal(crs, g.s.CurrentCRS())
+		g.Require().Equal(crs, g.s.CRS(big.NewInt(0)))
+		for i := 1; i < round+3; i++ {
+			g.Require().Equal(common.Hash{}, g.s.CRS(big.NewInt(int64(i))))
+		}
+		// Test if RoundHeight is purged.
+		g.Require().Equal(0, g.s.LenRoundHeight().Cmp(big.NewInt(1)))
+		for i := 1; i < round+3; i++ {
+			g.Require().Equal(0, g.s.RoundHeight(big.NewInt(int64(i))).Cmp(big.NewInt(0)))
+		}
+
+		for i := 0; i < round+3; i++ {
+			// Test if MPK is purged.
+			g.Require().Len(g.s.DKGMasterPublicKeys(big.NewInt(int64(i))), 0)
+			// Test if Complaint is purged.
+			g.Require().Len(g.s.DKGComplaints(big.NewInt(int64(i))), 0)
+			// Test if Finalized is purged.
+			g.Require().Equal(0,
+				g.s.DKGFinalizedsCount(big.NewInt(int64(i))).Cmp(big.NewInt(0)))
+			for _, addr := range addrs[i] {
+				g.Require().False(g.s.DKGFinalized(big.NewInt(int64(i)), addr), 0)
+			}
+		}
+	}
 }
 
 func TestGovernanceContract(t *testing.T) {
