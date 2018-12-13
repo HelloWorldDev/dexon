@@ -27,29 +27,35 @@ import (
 	"github.com/dexon-foundation/dexon/common"
 	"github.com/dexon-foundation/dexon/crypto"
 	"github.com/dexon-foundation/dexon/params"
+	"github.com/hashicorp/golang-lru"
 )
 
 var (
 	ErrInvalidChainId = errors.New("invalid chain id for signer")
 )
 
+const cacheSize = 1000000
+
 var GlobalSigCache *globalSigCache
 
 func init() {
-	GlobalSigCache = newGlobalSigCache()
+	GlobalSigCache = newGlobalSigCache(cacheSize)
 }
 
 // globalSigCache stores the mapping between txHash and sender address.
 // Since ECRecover is slow, and we run ECRecover very frequently (in
 // app.VerifyBlock, app.ConfirmedBlock), so we need to cache it globally.
 type globalSigCache struct {
-	cache   map[common.Hash]common.Address
-	cacheMu sync.RWMutex
+	cache *lru.Cache
 }
 
-func newGlobalSigCache() *globalSigCache {
+func newGlobalSigCache(cacheSize int) *globalSigCache {
+	cache, err := lru.New(cacheSize)
+	if err != nil {
+		panic(err)
+	}
 	return &globalSigCache{
-		cache: make(map[common.Hash]common.Address),
+		cache: cache,
 	}
 }
 
@@ -91,11 +97,9 @@ func (c *globalSigCache) Add(signer Signer, txs Transactions) (errorTx *Transact
 					Addr: addr,
 				}
 			}
-			// Acquire lock and set cache.
-			c.cacheMu.Lock()
-			defer c.cacheMu.Unlock()
+
 			for _, r := range results {
-				c.cache[r.Hash] = r.Addr
+				c.cache.ContainsOrAdd(r.Hash, r.Addr)
 			}
 		}(txs[i*batchSize : (i+1)*batchSize])
 	}
@@ -110,21 +114,18 @@ func (c *globalSigCache) Add(signer Signer, txs Transactions) (errorTx *Transact
 
 // Prune removes a list of hashes of tx from the cache.
 func (c *globalSigCache) Prune(hashes []common.Hash) {
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
-
 	for _, hash := range hashes {
-		delete(c.cache, hash)
+		c.cache.Remove(hash)
 	}
 }
 
 // Get returns a single address given a tx hash.
 func (c *globalSigCache) Get(hash common.Hash) (common.Address, bool) {
-	c.cacheMu.RLock()
-	defer c.cacheMu.RUnlock()
-
-	res, ok := c.cache[hash]
-	return res, ok
+	res, ok := c.cache.Get(hash)
+	if !ok {
+		return common.Address{}, false
+	}
+	return res.(common.Address), true
 }
 
 // sigCache is used to cache the derived sender and contains
