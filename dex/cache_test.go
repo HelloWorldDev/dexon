@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	coreCommon "github.com/dexon-foundation/dexon-consensus/common"
-	coreBlockdb "github.com/dexon-foundation/dexon-consensus/core/blockdb"
+	coreDb "github.com/dexon-foundation/dexon-consensus/core/db"
 	coreTypes "github.com/dexon-foundation/dexon-consensus/core/types"
 )
 
@@ -42,7 +42,7 @@ func (v byHash) Swap(i int, j int) {
 }
 
 func TestCacheVote(t *testing.T) {
-	db, err := coreBlockdb.NewMemBackedBlockDB()
+	db, err := coreDb.NewMemBackedBlockDB()
 	if err != nil {
 		panic(err)
 	}
@@ -131,7 +131,7 @@ func TestCacheVote(t *testing.T) {
 }
 
 func TestCacheBlock(t *testing.T) {
-	db, err := coreBlockdb.NewMemBackedBlockDB()
+	db, err := coreDb.NewMemBackedBlockDB()
 	if err != nil {
 		panic(err)
 	}
