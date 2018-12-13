@@ -97,6 +97,7 @@ var (
 		utils.MaxPeersFlag,
 		utils.MaxPendingPeersFlag,
 		utils.BlockProposerEnabledFlag,
+		utils.ConsensusDMomentFlag,
 		utils.MiningEnabledFlag,
 		utils.MinerThreadsFlag,
 		utils.MinerLegacyThreadsFlag,
