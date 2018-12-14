@@ -42,7 +42,7 @@ func (v byHash) Swap(i int, j int) {
 }
 
 func TestCacheVote(t *testing.T) {
-	db, err := coreDb.NewMemBackedBlockDB()
+	db, err := coreDb.NewMemBackedDB()
 	if err != nil {
 		panic(err)
 	}
@@ -131,7 +131,7 @@ func TestCacheVote(t *testing.T) {
 }
 
 func TestCacheBlock(t *testing.T) {
-	db, err := coreDb.NewMemBackedBlockDB()
+	db, err := coreDb.NewMemBackedDB()
 	if err != nil {
 		panic(err)
 	}
@@ -191,7 +191,7 @@ func TestCacheBlock(t *testing.T) {
 	block5 := &coreTypes.Block{
 		Hash: coreCommon.NewRandomHash(),
 	}
-	if err := db.Put(*block5); err != nil {
+	if err := db.PutBlock(*block5); err != nil {
 		panic(err)
 	}
 	blocks = cache.blocks(coreCommon.Hashes{block5.Hash})
