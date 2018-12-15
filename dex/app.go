@@ -47,6 +47,8 @@ type DexconApp struct {
 	finalizedBlockFeed event.Feed
 	scope              event.SubscriptionScope
 
+	offset uint64
+
 	chainLocks sync.Map
 }
 
@@ -469,6 +471,8 @@ func (d *DexconApp) BlockDelivered(
 	if err != nil {
 		panic(err)
 	}
+
+	result.Height += d.offset
 
 	newBlock := types.NewBlock(&types.Header{
 		Number:     new(big.Int).SetUint64(result.Height),

@@ -1,3 +1,20 @@
+// Copyright 2018 The dexon-consensus Authors
+// This file is part of the dexon-consensus library.
+//
+// The dexon-consensus library is free software: you can redistribute it
+// and/or modify it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of the License,
+// or (at your option) any later version.
+//
+// The dexon-consensus library is distributed in the hope that it will be
+// useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+// General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the dexon-consensus library. If not, see
+// <http://www.gnu.org/licenses/>.
+
 // Copyright 2014 The go-ethereum Authors
 // This file is part of go-ethereum.
 //
@@ -99,6 +116,7 @@ var (
 		utils.MaxPendingPeersFlag,
 		utils.BlockProposerEnabledFlag,
 		utils.ConsensusDMomentFlag,
+		utils.XHardForkFlag,
 		utils.MiningEnabledFlag,
 		utils.MinerThreadsFlag,
 		utils.MinerLegacyThreadsFlag,
@@ -368,6 +386,9 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 		var dexon *dex.Dexon
 		if err := stack.Service(&dexon); err != nil {
 			utils.Fatalf("Dexon service not running: %v", err)
+		}
+		if ctx.GlobalBool(utils.XHardForkFlag.Name) {
+			dexon.HardFork()
 		}
 		if err := dexon.StartProposing(); err != nil {
 			utils.Fatalf("Failed to string proposing: %v", err)

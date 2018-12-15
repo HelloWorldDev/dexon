@@ -274,6 +274,18 @@ func (s *Dexon) IsProposing() bool {
 	return s.bp.IsProposing()
 }
 
+func (s *Dexon) HardFork() {
+	height := s.blockchain.CurrentBlock().NumberU64()
+	log.Info("Hard fork", "height", height)
+	s.app.offset = height
+	// purgeGovernance
+	state, err := s.blockchain.State()
+	if err != nil {
+		panic(err)
+	}
+	vm.PurgeGovernanceContract(state)
+}
+
 // CreateDB creates the chain database.
 func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Database, error) {
 	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles)
