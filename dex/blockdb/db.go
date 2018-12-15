@@ -68,4 +68,13 @@ func (d *BlockDB) PutBlock(block coreTypes.Block) error {
 	return nil
 }
 
+func (d *BlockDB) GetCompactionChainTipInfo() (coreCommon.Hash, uint64) {
+	return rawdb.ReadCoreCompactionChainTipInfo(d.db)
+}
+
+func (d *BlockDB) PutCompactionChainTipInfo(hash coreCommon.Hash, h uint64) error {
+	rawdb.WriteCoreCompactionChainTipInfo(d.db, hash, h)
+	return nil
+}
+
 func (d *BlockDB) Close() error { return nil }
