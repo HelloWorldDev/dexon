@@ -287,8 +287,15 @@ func (d *DexconApp) PrepareWitness(consensusHeight uint64) (witness coreTypes.Wi
 		return
 	}
 
+	witnessHeight := witnessBlock.NumberU64()
+	if witnessHeight < d.offset {
+		log.Error("witness height is less than offset",
+			"witnessHeight", witnessHeight, "offset", d.offset)
+		return witness, fmt.Errorf("witness height is less than offset")
+	}
+	witnessHeight -= d.offset
 	return coreTypes.Witness{
-		Height: witnessBlock.NumberU64(),
+		Height: witnessHeight,
 		Data:   witnessData,
 	}, nil
 }
@@ -303,16 +310,22 @@ func (d *DexconApp) VerifyBlock(block *coreTypes.Block) coreTypes.BlockVerifySta
 	}
 
 	// Validate witness height.
-	if d.blockchain.GetPendingHeight() < block.Witness.Height {
-		log.Debug("Pending height < witness height")
-		return coreTypes.VerifyRetryLater
+	witnessHeight := block.Witness.Height + d.offset
+	if d.blockchain.GetPendingHeight() < witnessHeight {
+		if curBlock := d.blockchain.CurrentBlock(); curBlock != nil && curBlock.NumberU64() == witnessHeight {
+			// Just started from hard fork. Nothing to do here.
+		} else {
+			log.Debug("Pending height < witness height",
+				"pendingHeight", d.blockchain.GetPendingHeight(), "witnessHeight", witnessHeight)
+			return coreTypes.VerifyRetryLater
+		}
 	}
 
-	b := d.blockchain.GetPendingBlockByNumber(block.Witness.Height)
+	b := d.blockchain.GetPendingBlockByNumber(witnessHeight)
 	if b == nil {
-		b = d.blockchain.GetBlockByNumber(block.Witness.Height)
+		b = d.blockchain.GetBlockByNumber(witnessHeight)
 		if b == nil {
-			log.Error("Can not get block by height %v", block.Witness.Height)
+			log.Error("Can not get block by height %v", witnessHeight)
 			return coreTypes.VerifyInvalidBlock
 		}
 	}
@@ -486,6 +499,7 @@ func (d *DexconApp) BlockDelivered(
 	}, txs, nil, nil)
 
 	h := d.blockchain.CurrentBlock().NumberU64() + 1
+	block.Witness.Height += d.offset
 	_, err = d.blockchain.ProcessPendingBlock(newBlock, &block.Witness)
 	if err != nil {
 		log.Error("Failed to process pending block", "error", err)
