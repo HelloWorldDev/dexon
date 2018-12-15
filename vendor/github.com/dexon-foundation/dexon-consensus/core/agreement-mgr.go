@@ -182,6 +182,7 @@ func (mgr *agreementMgr) appendConfig(
 			recv,
 			newLeaderSelector(genValidLeader(mgr), mgr.logger),
 			mgr.auth)
+		agrModule.logger = mgr.logger
 		// Hacky way to make agreement module self contained.
 		recv.agreementModule = agrModule
 		mgr.baModules = append(mgr.baModules, agrModule)
@@ -204,6 +205,7 @@ func (mgr *agreementMgr) processVote(v *types.Vote) error {
 			"initRound", mgr.initRound)
 		return utils.ErrInvalidChainID
 	}
+	mgr.logger.Debug("Processing vote", "vote", v)
 	return mgr.baModules[v.Position.ChainID].processVote(v)
 }
 
@@ -239,7 +241,7 @@ func (mgr *agreementMgr) processAgreementResult(
 		return nil
 	}
 	if result.Position.Newer(&aID) {
-		mgr.logger.Info("Syncing BA", "position", &result.Position)
+		mgr.logger.Info("Syncing BA", "position", &result.Position, "oldPos", &aID)
 		nodes, err := mgr.cache.GetNodeSet(result.Position.Round)
 		if err != nil {
 			return err
@@ -319,6 +321,7 @@ func (mgr *agreementMgr) runBA(initRound uint64, chainID uint32) {
 		// Set next checkpoint.
 		roundBeginTime = config.beginTime
 		roundEndTime = config.beginTime.Add(config.roundInterval)
+		mgr.logger.Debug("RoundEndTime", "round", nextRound, roundEndTime)
 		// Check if this chain handled by this routine included in this round.
 		if chainID >= config.numChains {
 			isDisabled = true
@@ -416,6 +419,7 @@ Loop:
 		}
 		select {
 		case restartPos := <-recv.restartNotary:
+			mgr.logger.Debug("RestartNotary", "oldPos", &oldPos, "newPos", restartPos)
 			if !isStop(restartPos) {
 				if restartPos.Round > oldPos.Round {
 					// This round is finished.

@@ -170,7 +170,7 @@ func (l *Lattice) Exist(hash common.Hash) bool {
 // NOTE: input block should pass sanity check.
 func (l *Lattice) addBlockToLattice(
 	input *types.Block) (outputBlocks []*types.Block, err error) {
-
+	l.logger.Debug("Adding block to lattice", "block", input)
 	if tip := l.data.chains[input.Position.ChainID].tip; tip != nil {
 		if !input.Position.Newer(&tip.Position) {
 			l.logger.Warn("Dropping block: older than tip",
@@ -191,6 +191,7 @@ func (l *Lattice) addBlockToLattice(
 			err = l.data.sanityCheck(tip)
 			if err == nil {
 				var output []*types.Block
+				l.logger.Debug("Adding block to tip", "block", tip)
 				if output, err = l.data.addBlock(tip); err != nil {
 					l.logger.Error("Sanity Check failed", "error", err)
 					continue

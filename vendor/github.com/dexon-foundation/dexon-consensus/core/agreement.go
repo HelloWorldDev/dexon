@@ -113,6 +113,7 @@ type agreement struct {
 	candidateBlock map[common.Hash]*types.Block
 	fastForward    chan uint64
 	authModule     *Authenticator
+	logger         common.Logger
 }
 
 // newAgreement creates a agreement instance.
@@ -379,7 +380,9 @@ func (a *agreement) processVote(vote *types.Vote) error {
 				if vote.BlockHash == nullBlockHash || vote.BlockHash == skipBlockHash {
 					continue
 				}
+				a.logger.Debug("Fast Cond3", "Vote", vote)
 				if _, found := a.findCandidateBlockNoLock(vote.BlockHash); !found {
+					a.logger.Debug("Add to pulling", "hash", vote.BlockHash)
 					hashes = append(hashes, vote.BlockHash)
 				}
 			}

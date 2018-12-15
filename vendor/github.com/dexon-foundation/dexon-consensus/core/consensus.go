@@ -115,6 +115,8 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 
 func (recv *consensusBAReceiver) ConfirmBlock(
 	hash common.Hash, votes map[types.NodeID]*types.Vote) {
+	recv.consensus.logger.Debug("BA confirm",
+		"chainID", recv.chainID, "hash", hash)
 	var block *types.Block
 	isEmptyBlockConfirmed := hash == common.Hash{}
 	if isEmptyBlockConfirmed {
@@ -252,7 +254,8 @@ func (recv *consensusBAReceiver) PullBlocks(hashes common.Hashes) {
 	if !recv.isNotary {
 		return
 	}
-	recv.consensus.logger.Debug("Calling Network.PullBlocks", "hashes", hashes)
+	recv.consensus.logger.Debug("Calling Network.PullBlocks for BA",
+		"hashes", hashes)
 	recv.consensus.network.PullBlocks(hashes)
 }
 
@@ -1003,6 +1006,14 @@ func (con *Consensus) preProcessBlock(b *types.Block) (err error) {
 
 // deliverBlock deliver a block to application layer.
 func (con *Consensus) deliverBlock(b *types.Block) {
+	if err := con.db.UpdateBlock(*b); err != nil {
+		panic(err)
+	}
+	if err := con.db.PutCompactionChainTipInfo(
+		b.Hash, b.Finalization.Height); err != nil {
+		panic(err)
+	}
+	con.cfgModule.untouchTSigHash(b.Hash)
 	con.logger.Debug("Calling Application.BlockDelivered", "block", b)
 	con.app.BlockDelivered(b.Hash, b.Position, b.Finalization.Clone())
 	if b.Position.Round == con.roundToNotify {
@@ -1031,6 +1042,9 @@ func (con *Consensus) deliverBlock(b *types.Block) {
 		con.gov.NotifyRoundHeight(
 			con.roundToNotify, b.Finalization.Height)
 		con.roundToNotify++
+	}
+	if con.debugApp != nil {
+		con.debugApp.BlockReady(b.Hash)
 	}
 }
 
@@ -1072,14 +1086,7 @@ func (con *Consensus) processBlock(block *types.Block) (err error) {
 		"delivered", con.ccModule.lastDeliveredBlock(),
 		"pending", con.ccModule.lastPendingBlock())
 	for _, b := range deliveredBlocks {
-		if err = con.db.UpdateBlock(*b); err != nil {
-			panic(err)
-		}
-		con.cfgModule.untouchTSigHash(b.Hash)
 		con.deliverBlock(b)
-		if con.debugApp != nil {
-			con.debugApp.BlockReady(b.Hash)
-		}
 	}
 	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
 		return
