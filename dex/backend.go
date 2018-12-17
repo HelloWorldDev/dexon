@@ -311,6 +311,7 @@ func (s *Dexon) hardfork() {
 		GasLimit:   s.governance.DexconConfiguration(0).BlockGasLimit,
 		Difficulty: big.NewInt(1),
 		Root:       root,
+		Extra:      []byte("DEXON hardfork"),
 	}, nil, nil, nil)
 
 	data, err := rlp.EncodeToBytes(&witnessData{

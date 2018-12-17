@@ -1697,12 +1697,41 @@ func (bc *BlockChain) insertDexonChain(chain types.Blocks) (int, []interface{}, 
 			return i, events, coalescedLogs, err
 		}
 		// Validate the state using the default validator
-		err = bc.Validator().ValidateState(block, parent, state, receipts, usedGas)
-		if err != nil {
-			bc.reportBlock(block, receipts, err)
-			return i, events, coalescedLogs, err
+		var proctime time.Duration
+		hardfork := []byte("DEXON hardfork")
+		if bytes.Equal(block.Extra(), hardfork) {
+			state, err := bc.State()
+			if err != nil {
+				panic(err)
+			}
+			vm.PurgeGovernanceContract(state)
+
+			root, err := state.Commit(true)
+			if err != nil {
+				log.Error("Failed to commit", "error", err)
+				panic(err)
+			}
+			log.Info("New state root", "root", root)
+			if root != block.Root() {
+				log.Error("Root not equal", "expected", block.Root(), "has", root)
+				panic("root not updated")
+			}
+			proctime = time.Since(bstart)
+		} else if bytes.Equal(parent.Extra(), hardfork) {
+			if parent.Root() != block.Root() {
+				log.Error("Root not equal", "expected", parent.Root(), "has", block.Root())
+				panic("root not updated")
+			}
+			proctime = time.Since(bstart)
+		} else {
+			err = bc.Validator().ValidateState(block, parent, state, receipts, usedGas)
+			if err != nil {
+				bc.reportBlock(block, receipts, err)
+				return i, events, coalescedLogs, err
+			}
+			proctime = time.Since(bstart)
+
 		}
-		proctime := time.Since(bstart)
 
 		// Write the block to the chain and get the status.
 		status, err := bc.WriteBlockWithState(block, receipts, state)
