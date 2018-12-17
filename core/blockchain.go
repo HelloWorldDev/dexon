@@ -550,6 +550,7 @@ func (bc *BlockChain) Processor() Processor {
 
 // State returns a new mutable state based on the current HEAD block.
 func (bc *BlockChain) State() (*state.StateDB, error) {
+	log.Info("getting state", "height", bc.CurrentBlock().NumberU64(), "root", bc.CurrentBlock().Root())
 	return bc.StateAt(bc.CurrentBlock().Root())
 }
 

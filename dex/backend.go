@@ -19,7 +19,12 @@ package dex
 
 import (
 	"fmt"
+	"math/big"
 	"time"
+
+	dexCore "github.com/dexon-foundation/dexon-consensus/core"
+	coreEcdsa "github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
+	coreTypes "github.com/dexon-foundation/dexon-consensus/core/types"
 
 	"github.com/dexon-foundation/dexon/accounts"
 	"github.com/dexon-foundation/dexon/consensus"
@@ -27,6 +32,7 @@ import (
 	"github.com/dexon-foundation/dexon/core"
 	"github.com/dexon-foundation/dexon/core/bloombits"
 	"github.com/dexon-foundation/dexon/core/rawdb"
+	"github.com/dexon-foundation/dexon/core/types"
 	"github.com/dexon-foundation/dexon/core/vm"
 	"github.com/dexon-foundation/dexon/dex/downloader"
 	"github.com/dexon-foundation/dexon/eth/filters"
@@ -39,6 +45,7 @@ import (
 	"github.com/dexon-foundation/dexon/node"
 	"github.com/dexon-foundation/dexon/p2p"
 	"github.com/dexon-foundation/dexon/params"
+	"github.com/dexon-foundation/dexon/rlp"
 	"github.com/dexon-foundation/dexon/rpc"
 )
 
@@ -279,15 +286,87 @@ func (s *Dexon) IsProposing() bool {
 }
 
 func (s *Dexon) hardfork() {
-	height := s.blockchain.CurrentBlock().NumberU64()
-	log.Info("Hard fork", "height", height)
-	s.app.offset = height
+	curBlock := s.blockchain.CurrentBlock()
+	height := curBlock.NumberU64()
+	log.Info("Hard fork", "height", height, "root", curBlock.Root())
+	s.app.offset = height + 2
 	// purgeGovernance
 	state, err := s.blockchain.State()
 	if err != nil {
 		panic(err)
 	}
 	vm.PurgeGovernanceContract(state)
+	// Insert a block with new Governance state.
+	root, err := state.Commit(true)
+	if err != nil {
+		log.Error("Failed to commit", "error", err)
+		panic(err)
+	}
+
+	log.Info("New state root", "root", root)
+
+	newBlock := types.NewBlock(&types.Header{
+		Number:     new(big.Int).SetUint64(height + 1),
+		Time:       new(big.Int).Set(curBlock.Time()),
+		GasLimit:   s.governance.DexconConfiguration(0).BlockGasLimit,
+		Difficulty: big.NewInt(1),
+		Root:       root,
+	}, nil, nil, nil)
+
+	data, err := rlp.EncodeToBytes(&witnessData{
+		Root:        curBlock.Root(),
+		TxHash:      curBlock.TxHash(),
+		ReceiptHash: curBlock.ReceiptHash(),
+	})
+	if err != nil {
+		log.Error("Failed to encode rlp", "error", err)
+		panic(err)
+	}
+	dummyWitness := coreTypes.Witness{
+		Height: height,
+		Data:   data,
+	}
+
+	_, err = s.blockchain.ProcessPendingBlock(newBlock, &dummyWitness)
+	if err != nil {
+		log.Error("Failed to process hard fork block", "error", err)
+		panic(err)
+	}
+	// Insert a block witness new Governance state.
+	newBlock = s.blockchain.PendingBlock()
+	if height+1 != newBlock.NumberU64() {
+		panic("not inserted to pending block")
+	}
+	if newBlock.Root() != root {
+		log.Error("Root not equal", "expected", root, "has", newBlock.Root())
+		panic("root not updated")
+	}
+	witnessBlock := types.NewBlock(&types.Header{
+		Number:     new(big.Int).SetUint64(height + 2),
+		Time:       new(big.Int).Set(curBlock.Time()),
+		GasLimit:   s.governance.DexconConfiguration(0).BlockGasLimit,
+		Difficulty: big.NewInt(1),
+		Root:       root,
+	}, nil, nil, nil)
+
+	data, err = rlp.EncodeToBytes(&witnessData{
+		Root:        newBlock.Root(),
+		TxHash:      newBlock.TxHash(),
+		ReceiptHash: newBlock.ReceiptHash(),
+	})
+	if err != nil {
+		log.Error("Failed to encode rlp", "error", err)
+		panic(err)
+	}
+	witness := coreTypes.Witness{
+		Height: height + 1,
+		Data:   data,
+	}
+	_, err = s.blockchain.ProcessPendingBlock(witnessBlock, &witness)
+	if err != nil {
+		log.Error("Failed to process hard fork block", "error", err)
+		panic(err)
+	}
 }
 
 // CreateDB creates the chain database.
