@@ -153,7 +153,7 @@ func enableWhisper(ctx *cli.Context) bool {
 func makeFullNode(ctx *cli.Context) *node.Node {
 	stack, cfg := makeConfigNode(ctx)
 
-	utils.RegisterDexService(stack, &cfg.Dex)
+	utils.RegisterDexService(stack, &cfg.Dex, ctx.GlobalBool(utils.XHardForkFlag.Name))
 
 	if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
 		utils.RegisterDashboardService(stack, &cfg.Dashboard, gitCommit)

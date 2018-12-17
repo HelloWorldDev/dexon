@@ -1328,7 +1328,7 @@ func SetDashboardConfig(ctx *cli.Context, cfg *dashboard.Config) {
 }
 
 // RegisterDexService adds an Dexon client to the stack.
-func RegisterDexService(stack *node.Node, cfg *dex.Config) {
+func RegisterDexService(stack *node.Node, cfg *dex.Config, hardfork bool) {
 	var err error
 	if cfg.SyncMode == downloader.LightSync {
 		//err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
@@ -1337,7 +1337,7 @@ func RegisterDexService(stack *node.Node, cfg *dex.Config) {
 	} else {
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 			cfg.PrivateKey = ctx.ServerConfig.PrivateKey
-			fullNode, err := dex.New(ctx, cfg)
+			fullNode, err := dex.New(ctx, cfg, hardfork)
 			//if fullNode != nil && cfg.LightServ > 0 {
 			//	ls, _ := les.NewLesServer(fullNode, cfg)
 			//	fullNode.AddLesServer(ls)

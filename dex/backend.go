@@ -80,7 +80,7 @@ type Dexon struct {
 	indexer indexer.Indexer
 }
 
-func New(ctx *node.ServiceContext, config *Config) (*Dexon, error) {
+func New(ctx *node.ServiceContext, config *Config, hardfork bool) (*Dexon, error) {
 	// Consensus.
 	chainDb, err := CreateDB(ctx, config, "chaindata")
 	if err != nil {
@@ -158,6 +158,10 @@ func New(ctx *node.ServiceContext, config *Config) (*Dexon, error) {
 	// Dexcon related objects.
 	dex.governance = NewDexconGovernance(dex.APIBackend, dex.chainConfig, config.PrivateKey)
 	dex.app = NewDexconApp(dex.txPool, dex.blockchain, dex.governance, chainDb, config)
+
+	if hardfork {
+		dex.hardfork()
+	}
 
 	// Set config fetcher so engine can fetch current system configuration from state.
 	engine.SetConfigFetcher(dex.governance)
@@ -274,7 +278,7 @@ func (s *Dexon) IsProposing() bool {
 	return s.bp.IsProposing()
 }
 
-func (s *Dexon) HardFork() {
+func (s *Dexon) hardfork() {
 	height := s.blockchain.CurrentBlock().NumberU64()
 	log.Info("Hard fork", "height", height)
 	s.app.offset = height
