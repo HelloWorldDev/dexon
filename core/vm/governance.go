@@ -34,6 +34,7 @@ import (
 	"github.com/dexon-foundation/dexon-consensus/core/crypto/ecdsa"
 	coreTypes "github.com/dexon-foundation/dexon-consensus/core/types"
 	dkgTypes "github.com/dexon-foundation/dexon-consensus/core/types/dkg"
+	coreUtils "github.com/dexon-foundation/dexon-consensus/core/utils"
 )
 
 var GovernanceContractAddress = common.HexToAddress("5765692d4e696e6720536f6e696320426f6a6965")
@@ -2184,7 +2185,7 @@ func (g *GovernanceContract) addDKGComplaint(round *big.Int, comp []byte) ([]byt
 		return g.penalize()
 	}
 
-	verified, _ := core.VerifyDKGComplaintSignature(&dkgComplaint)
+	verified, _ := coreUtils.VerifyDKGComplaintSignature(&dkgComplaint)
 	if !verified {
 		return g.penalize()
 	}
@@ -2234,7 +2235,7 @@ func (g *GovernanceContract) addDKGMasterPublicKey(round *big.Int, mpk []byte) (
 		return g.penalize()
 	}
 
-	verified, _ := core.VerifyDKGMasterPublicKeySignature(&dkgMasterPK)
+	verified, _ := coreUtils.VerifyDKGMasterPublicKeySignature(&dkgMasterPK)
 	if !verified {
 		return g.penalize()
 	}
@@ -2261,7 +2262,7 @@ func (g *GovernanceContract) addDKGMPKReady(round *big.Int, ready []byte) ([]byt
 		return g.penalize()
 	}
 
-	verified, _ := core.VerifyDKGMPKReadySignature(&dkgReady)
+	verified, _ := coreUtils.VerifyDKGMPKReadySignature(&dkgReady)
 	if !verified {
 		return g.penalize()
 	}
@@ -2290,7 +2291,7 @@ func (g *GovernanceContract) addDKGFinalize(round *big.Int, finalize []byte) ([]
 		return g.penalize()
 	}
 
-	verified, _ := core.VerifyDKGFinalizeSignature(&dkgFinalize)
+	verified, _ := coreUtils.VerifyDKGFinalizeSignature(&dkgFinalize)
 	if !verified {
 		return g.penalize()
 	}
