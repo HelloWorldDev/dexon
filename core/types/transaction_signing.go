@@ -21,11 +21,14 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"runtime"
+	"strconv"
 	"sync"
 
 	"github.com/dexon-foundation/dexon/common"
 	"github.com/dexon-foundation/dexon/crypto"
+	"github.com/dexon-foundation/dexon/log"
 	"github.com/dexon-foundation/dexon/params"
 )
 
@@ -34,9 +37,22 @@ var (
 )
 
 var GlobalSigCache *globalSigCache
+var globalSigRoutines = runtime.NumCPU() - 2
 
 func init() {
 	GlobalSigCache = newGlobalSigCache()
+	if val, ok := os.LookupEnv("GOMAXPROCS"); ok {
+		num, err := strconv.Atoi(val)
+		if err != nil {
+			log.Error("cannot convert env GOMAXPROCS to integer",
+				"GOMACPROCS", val, "error", err)
+		} else {
+			globalSigRoutines = num - 2
+		}
+	}
+	if globalSigRoutines < 1 {
+		globalSigRoutines = 1
+	}
 }
 
 type resultEntry struct {
@@ -67,16 +83,12 @@ func newGlobalSigCache() *globalSigCache {
 
 // Add adds a list of transactions into sig cache.
 func (c *globalSigCache) Add(signer Signer, txs Transactions) (errorTx *Transaction, err error) {
-	num := runtime.NumCPU() - 2
-	if num < 1 {
-		num = 1
-	}
-	batchSize := len(txs) / num
+	batchSize := len(txs) / globalSigRoutines
 	wg := sync.WaitGroup{}
-	wg.Add(num)
+	wg.Add(globalSigRoutines)
 	txError := make(chan error, 1)
 
-	for i := 0; i < num; i++ {
+	for i := 0; i < globalSigRoutines; i++ {
 		go func(txs Transactions) {
 			defer wg.Done()
 			results := make([]resultEntry, len(txs))
