@@ -93,7 +93,7 @@ matrix:
         - go run build/ci.go install
         - go run build/ci.go archive -type tar -signer LINUX_SIGNING_KEY -upload dexon-builds
         - ./build/bls-arm64.sh
-        - go run build/ci.go install -arch arm64 -cc aarch64-linux-gnu-gcc
+        - CGO_CFLAGS="-fuse-ld=gold `go env CGO_CFLAGS`" go run build/ci.go install -arch arm64 -cc aarch64-linux-gnu-gcc
         - go run build/ci.go archive -arch arm64 -type tar -signer LINUX_SIGNING_KEY -upload
           dexon-builds
     #  BLS lib does not support 32-bit platform
