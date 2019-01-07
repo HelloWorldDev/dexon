@@ -104,12 +104,15 @@ func (recv *consensusBAReceiver) ProposeBlock() common.Hash {
 		recv.consensus.logger.Error("unable to propose block")
 		return nullBlockHash
 	}
-	if err := recv.consensus.preProcessBlock(block); err != nil {
-		recv.consensus.logger.Error("Failed to pre-process block", "error", err)
-		return common.Hash{}
-	}
-	recv.consensus.logger.Debug("Calling Network.BroadcastBlock", "block", block)
-	recv.consensus.network.BroadcastBlock(block)
+	go func() {
+		if err := recv.consensus.preProcessBlock(block); err != nil {
+			recv.consensus.logger.Error("Failed to pre-process block", "error", err)
+			return
+		}
+		recv.consensus.logger.Debug("Calling Network.BroadcastBlock",
+			"block", block)
+		recv.consensus.network.BroadcastBlock(block)
+	}()
 	return block.Hash
 }
 
@@ -1086,9 +1089,7 @@ func (con *Consensus) deliverFinalizedBlocksWithoutLock() (err error) {
 	for _, b := range deliveredBlocks {
 		con.deliverBlock(b)
 	}
-	if err = con.lattice.PurgeBlocks(deliveredBlocks); err != nil {
-		return
-	}
+	err = con.lattice.PurgeBlocks(deliveredBlocks)
 	return
 }
 
@@ -1150,9 +1151,7 @@ func (con *Consensus) prepareBlock(b *types.Block,
 		err = ErrCRSNotReady
 		return
 	}
-	if err = con.signer.SignCRS(b, crs); err != nil {
-		return
-	}
+	err = con.signer.SignCRS(b, crs)
 	return
 }
 

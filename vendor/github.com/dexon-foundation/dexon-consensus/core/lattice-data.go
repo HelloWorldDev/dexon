@@ -257,10 +257,7 @@ func (data *latticeData) sanityCheck(b *types.Block) error {
 			return ErrNotAckParent
 		}
 	}
-	if err := data.checkAckingRelations(b); err != nil {
-		return err
-	}
-	return nil
+	return data.checkAckingRelations(b)
 }
 
 // addBlock processes blocks. It does sanity check, inserts block into lattice
@@ -504,19 +501,21 @@ func (data *latticeData) prepareEmptyBlock(b *types.Block) (err error) {
 }
 
 // TODO(mission): make more abstraction for this method.
-// nextHeight returns the next height of a chain.
-func (data *latticeData) nextHeight(
-	round uint64, chainID uint32) (uint64, error) {
+// nextBlock returns the next height and timestamp of a chain.
+func (data *latticeData) nextBlock(
+	round uint64, chainID uint32) (uint64, time.Time, error) {
 	chainTip := data.chains[chainID].tip
 	bindTip, err := data.isBindTip(
 		types.Position{Round: round, ChainID: chainID}, chainTip)
 	if err != nil {
-		return 0, err
+		return 0, time.Time{}, err
 	}
+	config := data.getConfig(round)
 	if bindTip {
-		return chainTip.Position.Height + 1, nil
+		return chainTip.Position.Height + 1,
+			chainTip.Timestamp.Add(config.minBlockTimeInterval), nil
 	}
-	return 0, nil
+	return 0, config.roundBeginTime, nil
 }
 
 // findBlock seeks blocks in memory or db.
